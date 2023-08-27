@@ -1,11 +1,6 @@
 # GAZ-AAA_CoinPrice
 GAZ-AAA 코인 시세 결정 프로그램
 
-<br>
-
-## IDE: Visual Studio 2022
-이 프로젝트는 Visual Studio로 만든 C++ Console App입니다.
-
 ## [C Language](https://devdocs.io/c/) + [MariaDB](https://mariadb.org/)
 |Language, Database|Version|
 |:---:|---|

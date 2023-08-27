@@ -1,6 +1,7 @@
 ﻿#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <windows.h> // windows 환경 build
 //#include <unistd.h> // linuxd 환경 build
 #include <mysql.h>
@@ -11,10 +12,9 @@ constexpr auto VERSION = "0.7"; // 현재 버전 v0.7
 constexpr int CoinNameBufferSize = 30; // 코인 이름 길이: 30byte
 constexpr int CoinNewsBufferSize = 255; // 코인 뉴스 길이: 255byte
 
-
 /**
  * @brief 쿼리 실행 함수
- * @param MYSQL* Connect 변수, 쿼리
+ * @param MYSQL* Connect 변수, char[] 쿼리
  * @return mysql_store_result(Connect)의 값
  */
 MYSQL_RES* ExcuteQuery(MYSQL* connect, char query[]);
@@ -23,13 +23,13 @@ MYSQL_RES* ExcuteQuery(MYSQL* connect, char query[]);
  * @brief coinshistory테이블에 INSERT 수행
  * @param 코인명, 시가, 종가, 저가, 고가, 상폐여부
  */
-void BackupData(char names[][30], int opening[], int closing[], int low[], int high[], bool delisted[]);
+void InsertData(MYSQL* connect, char* query, char* CoinName, int opening, int closing, int low, int high, bool delisted);
 
 /**
  * @brief 뉴스 카드 발급 함수
  * @param 코인명, 변경 대상 뉴스, 뉴스 지속 시간, 뉴스 영향력
  */
-void NewCardIssue(char* CoinName, char* CoinNews, int* NewsContinuous, int* NewsEffect);
+void NewCardIssue(char* CoinName, char* CoinNews, int* NewsEffect);
 
 int main()
 {
@@ -43,6 +43,10 @@ int main()
 	MYSQL_RES* Result = NULL;
 	MYSQL_ROW Rows;
 	char Query[400] = { 0 }; // 쿼리 최대 길이: 400byte
+
+	time_t now; // 현재 시간
+	struct tm timeInfo; // 시간 정보
+	srand((unsigned int)time(NULL));
 
 	printf("CoinDB Version: %s\nmysql client version:%s\n", VERSION, mysql_get_client_info());
 	if (mysql_real_connect(Connect, HOST, HOSTNAME, HOSTPW, DB, PORT, NULL, 0)) // DB 연결 성공 
@@ -60,18 +64,19 @@ int main()
 		/* DB data => Heap Memory: 카디널리티, or * 데이터 버퍼 크기 */
 		bool memory_ok = true; // 메모리 할당 상태
 
-		char** CoinNames; // VARCHAR(30) * CoinCount
+		char** CoinNames; // VARCHAR(30) * CoinCount (Immutable: Read Only)
 		int* CoinPrice; // INT * CoinCount
 		bool* CoinDelisted; // TINYINT(1): bool * CoinCount
 		int* CoinDelistingTerm; // INT * CoinCount
-		char** CoinNews; // TEXT * CoinCount
+		char** CoinNews; // VARCHAR(255) * CoinCount
 		int* CoinNewsTerm; // INT * CoinCount
 		int* CoinNewsEffect; // INT * CoinCount
-		int* CoindefaultPrice; // INT * CoinCount
-		int* CoinorderQuantity; // INT * CoinCount
+		int* CoinDefaultPrice; // INT * CoinCount (Immutable: Read Only)
+		int* CoinFluctuationRate; // INT * CoinCount (Immutable: Read Only)
+		int* CoinOrderQuantity; // INT * CoinCount
 
 		/* 초기화 변수 */
-		int* CoinOpeningPrice; // 코인 시가
+		int* CoinOpeningPrice; // 코인 시가	
 		int* CoinLowPrice; // 코인 저가
 		int* CoinHighPrice; // 코인 고가
 		int* CoinClosingPrice; // 코인 종가
@@ -86,8 +91,9 @@ int main()
 		for (int record_index = 0; record_index < CoinCount; record_index++) CoinNews[record_index] = (char*)calloc(CoinNewsBufferSize, sizeof(char));
 		CoinNewsTerm = (int*)calloc(CoinCount, sizeof(int)); // CoinNewsTerm
 		CoinNewsEffect = (int*)calloc(CoinCount, sizeof(int)); // CoinNewsEffect
-		CoindefaultPrice = (int*)calloc(CoinCount, sizeof(int)); // CoindefaultPrice
-		CoinorderQuantity = (int*)calloc(CoinCount, sizeof(int)); // CoinorderQuantity
+		CoinDefaultPrice = (int*)calloc(CoinCount, sizeof(int)); // CoindefaultPrice
+		CoinFluctuationRate = (int*)calloc(CoinCount, sizeof(int)); // CoinFluctuationRate
+		CoinOrderQuantity = (int*)calloc(CoinCount, sizeof(int)); // CoinorderQuantity
 		CoinOpeningPrice = (int*)calloc(CoinCount, sizeof(int)); // 코인 시가
 		CoinLowPrice = (int*)calloc(CoinCount, sizeof(int)); // 코인 저가
 		CoinHighPrice = (int*)calloc(CoinCount, sizeof(int)); // 코인 고가
@@ -107,333 +113,187 @@ int main()
 			}
 		}
 		if (CoinNames == NULL || CoinPrice == NULL || CoinDelisted == NULL || CoinDelistingTerm == NULL ||
-			CoinNews == NULL || CoinNewsTerm == NULL || CoinNewsEffect == NULL || CoindefaultPrice == NULL ||
-			CoinorderQuantity == NULL || CoinOpeningPrice == NULL || CoinLowPrice == NULL || CoinHighPrice == NULL ||
-			CoinClosingPrice == NULL || memory_ok == false)
+			CoinNews == NULL || CoinNewsTerm == NULL || CoinNewsEffect == NULL || CoinDefaultPrice == NULL ||
+			CoinFluctuationRate == NULL || CoinOrderQuantity == NULL || CoinOpeningPrice == NULL || CoinLowPrice == NULL ||
+			CoinHighPrice == NULL || CoinClosingPrice == NULL || memory_ok == false)
 		{
 			puts("Insufficient Memory!");
 			free(CoinNames); free(CoinPrice); free(CoinDelisted); free(CoinDelistingTerm);
-			free(CoinNews); free(CoinNewsTerm); free(CoinNewsEffect); free(CoindefaultPrice);
-			free(CoinorderQuantity); free(CoinOpeningPrice); free(CoinLowPrice); free(CoinHighPrice);
-			free(CoinClosingPrice);
+			free(CoinNews); free(CoinNewsTerm); free(CoinNewsEffect); free(CoinDefaultPrice);
+			free(CoinFluctuationRate); free(CoinOrderQuantity); free(CoinOpeningPrice); free(CoinLowPrice);
+			free(CoinHighPrice); free(CoinClosingPrice);
 
 			mysql_close(Connect);
 			return 0;
 		}
 
 		bool IsBackup = false; // 10분마다 backup 
-		bool IsBackup1 = false; // 1시간마다 backup
 
 		/* Character Set */
 		sprintf_s(Query, sizeof(Query), "SET names euckr");
 		ExcuteQuery(Connect, Query);
 
-		/* 코인 목록 불러오기 */
-		sprintf_s(Query, sizeof(Query), "SELECT coinName, price, delisted, delistingTerm, news, newsTerm, newsEffect, defaultPrice, orderQuantity FROM coins");
+		/* 코인 데이터 불러오기 */
+		sprintf_s(Query, sizeof(Query), "SELECT coinName, price, delisted, delistingTerm, news, newsTerm, newsEffect, defaultPrice, fluctuationRate, orderQuantity FROM coins");
 		Result = ExcuteQuery(Connect, Query);
 		for (int fetch_index = 0; fetch_index < CoinCount; fetch_index++)
 		{
 			if ((Rows = mysql_fetch_row(Result)) != NULL)
 			{
 				sprintf_s(CoinNames[fetch_index], CoinNameBufferSize, "%s", Rows[0]);
-				CoinPrice[fetch_index] = atoi(Rows[1]);
+
+				if (CoinPrice[fetch_index] == 0 && atoi(Rows[2]) != 1)
+				{// 현재가 == 0 && 상폐X => 이전 종가 대신 현재가로 적용, [시가, 종가, 저가, 고가] = 현재가로 적용(history 테이블에서 데이터를 불러오지 못 할 경우)
+					CoinPrice[fetch_index] = atoi(Rows[1]);
+					CoinOpeningPrice[fetch_index] = CoinPrice[fetch_index];
+					CoinClosingPrice[fetch_index] = CoinPrice[fetch_index];
+					CoinLowPrice[fetch_index] = CoinPrice[fetch_index];
+					CoinHighPrice[fetch_index] = CoinPrice[fetch_index];
+				}
 				CoinDelisted[fetch_index] = atoi(Rows[2]);
 				CoinDelistingTerm[fetch_index] = atoi(Rows[3]);
 				sprintf_s(CoinNews[fetch_index], CoinNewsBufferSize, "%s", Rows[4]);
 				CoinNewsTerm[fetch_index] = atoi(Rows[5]);
 				CoinNewsEffect[fetch_index] = atoi(Rows[6]);
-				CoindefaultPrice[fetch_index] = atoi(Rows[7]);
-				CoinorderQuantity[fetch_index] = atoi(Rows[8]);
+				CoinDefaultPrice[fetch_index] = atoi(Rows[7]);
+				CoinFluctuationRate[fetch_index] = atoi(Rows[8]);
+				CoinOrderQuantity[fetch_index] = atoi(Rows[9]);
 			}
 			else puts("DB의 코인 개수를 확인해주세요");
 		}
 
-		// 일단 coins테이블에서 불러오기까지 함
-		// 이제 본격적인 코인 가격 변동 로직 구현해야 함
-
-
-
-
-
-
-
-		// 백업할 때 쓰는 걸로 하자. 현재가는 coins테이블에서 불러오기
-		/* 초기 가격 데이터 불러오기: coinshistory테이블의 id 역순 */
-		sprintf_s(Query, sizeof(Query), "SELECT closingPrice FROM coinshistory ORDER BY id DESC LIMIT %d", CoinCount);
+		/* 이전 가격 데이터 불러오기: coinshistory테이블의 id 역순 */
+		sprintf_s(Query, sizeof(Query), "SELECT COUNT(*) FROM coinshistory");
 		Result = ExcuteQuery(Connect, Query);
-		for (int fetch_index = CoinCount - 1; fetch_index > 0; fetch_index--)
+		if (Rows = mysql_fetch_row(Result))
 		{
-			if ((Rows = mysql_fetch_row(Result)) != NULL) CoinPrice[fetch_index] = atoi(Rows[0]);
-			else // 코인 개수만큼 코인 목록을 불러올 때 해당 값이 없을 경우, 가장 최근 값으로 불러오기 
+			if (atoi(Rows[0]) >= CoinCount)
 			{
-				MYSQL_RES* tempResult = NULL;
-				sprintf_s(Query, sizeof(Query), "SELECT closingPrice FROM coinshistory WHERE coinName='%s' ORDER BY id DESC LIMIT 1", CoinNames[fetch_index]);
-				tempResult = ExcuteQuery(Connect, Query);
-				if ((Rows = mysql_fetch_row(tempResult)) != NULL) CoinPrice[fetch_index] = atoi(Rows[0]);
-			}
+				for (int fetch_index = 0; fetch_index < CoinCount; fetch_index++)
+				{
+					sprintf_s(Query, sizeof(Query), "SELECT closingPrice FROM coinshistory WHERE coinName='%s' ORDER BY id DESC LIMIT 1", CoinNames[fetch_index]);
+					Result = ExcuteQuery(Connect, Query);
+					if (Rows = mysql_fetch_row(Result)) CoinPrice[fetch_index] = atoi(Rows[0]);
 
-			/* 이전 종가 = 현재가 = 현재 시가 = 현재 종가 = 현재 저가 = 현재 고가 */
-			CoinOpeningPrice[fetch_index] = CoinPrice[fetch_index];
-			CoinClosingPrice[fetch_index] = CoinPrice[fetch_index];
-			CoinLowPrice[fetch_index] = CoinPrice[fetch_index];
-			CoinHighPrice[fetch_index] = CoinPrice[fetch_index];
+					/* 이전 종가 = 현재가 = 현재 시가 = 현재 종가 = 현재 저가 = 현재 고가 */
+					CoinOpeningPrice[fetch_index] = CoinPrice[fetch_index];
+					CoinClosingPrice[fetch_index] = CoinPrice[fetch_index];
+					CoinLowPrice[fetch_index] = CoinPrice[fetch_index];
+					CoinHighPrice[fetch_index] = CoinPrice[fetch_index];
+				}
+			}
 		}
 
+		while (true)
+		{
+			now = time(NULL);
+			localtime_s(&timeInfo, &now);
+			if (timeInfo.tm_min % 5 == 0 && timeInfo.tm_min % 10 != 0) IsBackup = false; // %5분마다 backup = false 
+			if (timeInfo.tm_min % 10 == 0 && !IsBackup) // 10분마다 backup = true 
+			{
+				for (int coin = 0; coin < CoinCount; coin++)
+				{
+					InsertData(Connect, Query, CoinNames[coin], CoinOpeningPrice[coin], CoinClosingPrice[coin], CoinLowPrice[coin], CoinHighPrice[coin], CoinDelisted[coin]);
+					/* 현재가 = 현재 시가 = 현재 종가 = 현재 저가 = 현재 고가 초기화 */
+					CoinOpeningPrice[coin] = CoinPrice[coin];
+					CoinClosingPrice[coin] = CoinPrice[coin];
+					CoinLowPrice[coin] = CoinPrice[coin];
+					CoinHighPrice[coin] = CoinPrice[coin];
+				}
 
-		//while (1)
-		//{
-		//	sprintf(Query, "SELECT * FROM coinlist"); // 코인 목록 가져오기
-		//	excuteStatus = mysql_query(Connect, Query);
-		//	if (excuteStatus != 0) printf("Error : %s\n", mysql_error(Connect));
-		//	else
-		//	{
-		//		int i = 0;
-		//		Result = mysql_store_result(Connect);
-		//		while ((Rows = mysql_fetch_row(Result)) != NULL)
-		//		{
-		//			sprintf(CoinNames[i], "%s", Rows[0]);
-		//			CoinPrice[i] = atoi(Rows[2]);
-		//			CoinDelisted[i] = atoi(Rows[3]);
-		//			CoinDelistingTerm[i] = atoi(Rows[4]);
-		//			sprintf(CoinNews[i], "%s", Rows[5]);
-		//			CoinNewsTerm[i] = atoi(Rows[6]);
-		//			CoinNewsEffect[i] = atoi(Rows[7]);
-		//			i++;
-		//		}
-		//		mysql_free_result(Result);
-		//	}
-		//	if (t.tm_min % 5 == 0 && t.tm_min % 10 != 0) IsBackup = false; // %5분마다 backup = false 
-		//	if (t.tm_min % 10 == 0 && !IsBackup) // 10분마다 backup = true 
-		//	{
-		//		//printf("DB-Backup %d%02d%02d_%02d_%dCoins\n", year, month, day, hour, minute);
-		//		mysql_select_db(Connect, "coinsdb");
-		//		char CreateQuery[600];
-		//		sprintf(CreateQuery, "CREATE TABLE %d%02d%02d_%02d_%dCoins (CoinName VARCHAR(20) NOT NULL COLLATE 'euckr_korean_ci', Price INT(11) NULL DEFAULT '0', ClosingPrice INT(11) NULL DEFAULT '0', LowPrice INT(11) NULL DEFAULT '0', HighPrice INT(11) NULL DEFAULT '0', PRIMARY KEY(CoinName) USING BTREE) COLLATE = 'euckr_korean_ci' ENGINE = InnoDB;", year, month, day, hour, minute);
-		//		ExcuteQuery(Connect, CreateQuery);
-		//		sprintf(Query, "INSERT INTO coinsdb.%d%02d%02d_%02d_%dCoins (CoinName, ClosingPrice) SELECT CoinName, Price FROM coins.coinlist;", year, month, day, hour, minute);
-		//		ExcuteQuery(Connect, Query);
-		//		for (int i = 0; i < CoinCount; i++)
-		//		{
-		//			sprintf(Query, "UPDATE %d%02d%02d_%02d_%dCoins SET Price=%d, LowPrice=%d, HighPrice=%d WHERE CoinName='%s';", year, month, day, hour, minute, CoinOpeningPrice[i], CoinLowPrice[i], CoinHighPrice[i], CoinNames[i]);
-		//			ExcuteQuery(Connect, Query);
-		//			CoinOpeningPrice[i] = CoinPrice[i], CoinLowPrice[i] = CoinPrice[i], CoinHighPrice[i] = CoinPrice[i]; // 시가 = 저가 = 고가 = 현재가로 초기화 
-		//		}
-		//		sprintf(Query, "%s", "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'coinsdb';");
-		//		excuteStatus = mysql_query(Connect, Query);
-		//		Result = mysql_store_result(Connect);
-		//		Rows = mysql_fetch_row(Result);
-		//		int TableCount = atoi(Rows[0]);
-		//		while (TableCount > 144)
-		//		{
-		//			sprintf(Query, "%s", "SHOW TABLES;");
-		//			excuteStatus = mysql_query(Connect, Query);
-		//			Result = mysql_store_result(Connect);
-		//			Rows = mysql_fetch_row(Result);
-		//			sprintf(Query, "DROP TABLE %s", Rows[0]);
-		//			mysql_free_result(Result);
-		//			ExcuteQuery(Connect, Query);
-		//			sprintf(Query, "%s", "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'coinsdb';");
-		//			excuteStatus = mysql_query(Connect, Query);
-		//			Result = mysql_store_result(Connect);
-		//			Rows = mysql_fetch_row(Result);
-		//			TableCount = atoi(Rows[0]);
-		//			mysql_free_result(Result);
-		//		}
-		//		IsBackup = true;
-		//		mysql_select_db(Connect, "coins");
-		//	}
-		//	if (t.tm_min % 30 == 0 && t.tm_min != 0) IsBackup1 = false; // %30분마다 backup1 = false 
-		//	if (t.tm_min == 0 && !IsBackup1) // 1시간마다 backup1 = true 
-		//	{
-		//		char CreateQuery[600];
-		//		//printf("DB-Backup %d%02d%02d_%02dCoins\n", year, month, day, hour);
-		//		mysql_select_db(Connect, "coinsdb_hour");
-		//		sprintf(CreateQuery, "CREATE TABLE %d%02d%02d_%02dCoins (CoinName VARCHAR(20) NOT NULL COLLATE 'euckr_korean_ci', Price INT(11) NULL DEFAULT '0', ClosingPrice INT(11) NULL DEFAULT '0', LowPrice INT(11) NULL DEFAULT '0', HighPrice INT(11) NULL DEFAULT '0', PRIMARY KEY(CoinName) USING BTREE) COLLATE = 'euckr_korean_ci' ENGINE = InnoDB;", year, month, day, hour);
-		//		ExcuteQuery(Connect, CreateQuery);
-		//		sprintf(Query, "INSERT INTO coinsdb_hour.%d%02d%02d_%02dCoins (CoinName, ClosingPrice) SELECT CoinName, Price FROM coins.coinlist;", year, month, day, hour);
-		//		ExcuteQuery(Connect, Query);
-		//		for (int i = 0; i < CoinCount; i++)
-		//		{
-		//			sprintf(Query, "UPDATE %d%02d%02d_%02dCoins SET Price=%d, LowPrice=%d, HighPrice=%d WHERE CoinName='%s';", year, month, day, hour, CoinOpeningPrice1[i], CoinLowPrice1[i], CoinHighPrice1[i], CoinNames[i]);
-		//			ExcuteQuery(Connect, Query);
-		//			CoinOpeningPrice1[i] = CoinPrice[i], CoinLowPrice1[i] = CoinPrice[i], CoinHighPrice1[i] = CoinPrice[i]; // 시가 = 저가 = 고가 = 현재가로 초기화 
-		//		}
-		//		sprintf(Query, "%s", "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'coinsdb_hour';");
-		//		excuteStatus = mysql_query(Connect, Query);
-		//		Result = mysql_store_result(Connect);
-		//		Rows = mysql_fetch_row(Result);
-		//		int TableCount = atoi(Rows[0]);
-		//		while (TableCount > 920) // 23 * 40 
-		//		{
-		//			sprintf(Query, "%s", "SHOW TABLES;");
-		//			excuteStatus = mysql_query(Connect, Query);
-		//			Result = mysql_store_result(Connect);
-		//			Rows = mysql_fetch_row(Result);
-		//			sprintf(Query, "DROP TABLE %s", Rows[0]);
-		//			mysql_free_result(Result);
-		//			ExcuteQuery(Connect, Query);
-		//			sprintf(Query, "%s", "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'coinsdb_hour';");
-		//			excuteStatus = mysql_query(Connect, Query);
-		//			Result = mysql_store_result(Connect);
-		//			Rows = mysql_fetch_row(Result);
-		//			TableCount = atoi(Rows[0]);
-		//			mysql_free_result(Result);
-		//		}
-		//		IsBackup1 = true;
-		//		mysql_select_db(Connect, "coins");
-		//	}
-		//	for (int i = 0; i < CoinCount; i++)
-		//	{
-		//		int Fluctuation = CoinPrice[i];
-		//		if (CoinNewsTerm[i] == 0) sprintf(CoinNews[i], "%s", " ");
-		//		if (CoinNewsTerm[i] < 0) CoinNewsTerm[i] = 0; // 뉴스 없을 때 -1
-		//		/* 변동 알고리즘 */
-		//		// 기본 변동률 적용 : 뉴스 없음 
-		//		int NoNews = rand() % 11; // 뉴스 없을 때 변동 확률 
-		//		if (NoNews < 3) Fluctuation += 0; // 변동 없음 27% 
-		//		else if (NoNews > 6) // 상승 36%
-		//		{
-		//			if (strcmp(CoinNames[i], "가자코인") == 0) Fluctuation += (rand() % 10) + 1;
-		//			if (strcmp(CoinNames[i], "까스") == 0) Fluctuation += (rand() % 20) + 1;
-		//			if (strcmp(CoinNames[i], "디카르코") == 0) Fluctuation += (rand() % 4) + 1;
-		//			if (strcmp(CoinNames[i], "람다토큰") == 0) Fluctuation += (rand() % 10) + 1;
-		//			if (strcmp(CoinNames[i], "리퍼리음") == 0) Fluctuation += (rand() % 2) + 1;
-		//			if (strcmp(CoinNames[i], "리풀") == 0) Fluctuation += (rand() % 4) + 1;
-		//			if (strcmp(CoinNames[i], "비투코인") == 0) Fluctuation += (rand() % 100) + 1;
-		//			if (strcmp(CoinNames[i], "새럼") == 0) Fluctuation += (rand() % 3) + 1;
-		//			if (strcmp(CoinNames[i], "서브프레임") == 0) Fluctuation += (rand() % 2) + 1;
-		//			if (strcmp(CoinNames[i], "센드박스") == 0) Fluctuation += (rand() % 11) + 1;
-		//			if (strcmp(CoinNames[i], "솔리나") == 0) Fluctuation += (rand() % 30) + 1;
-		//			if (strcmp(CoinNames[i], "스틤") == 0) Fluctuation += (rand() % 7) + 1;
-		//			if (strcmp(CoinNames[i], "스틤달러") == 0) Fluctuation += (rand() % 15) + 1;
-		//			if (strcmp(CoinNames[i], "승환토큰") == 0) Fluctuation += (rand() % 3) + 1;
-		//			if (strcmp(CoinNames[i], "시바코인") == 0) Fluctuation += (rand() % 4) + 1;
-		//			if (strcmp(CoinNames[i], "썸띵") == 0) Fluctuation += (rand() % 6) + 1;
-		//			if (strcmp(CoinNames[i], "아르곳") == 0) Fluctuation += (rand() % 6) + 1;
-		//			if (strcmp(CoinNames[i], "아이쿠") == 0) Fluctuation += (rand() % 2) + 1;
-		//			if (strcmp(CoinNames[i], "아화토큰") == 0) Fluctuation += (rand() % 4) + 1;
-		//			if (strcmp(CoinNames[i], "앱토수") == 0) Fluctuation += (rand() % 17) + 1;
-		//			if (strcmp(CoinNames[i], "에이더") == 0) Fluctuation += (rand() % 15) + 1;
-		//			if (strcmp(CoinNames[i], "엑스인피니티") == 0) Fluctuation += (rand() % 20) + 1;
-		//			if (strcmp(CoinNames[i], "웨이부") == 0) Fluctuation += (rand() % 12) + 1;
-		//			if (strcmp(CoinNames[i], "위밋스") == 0) Fluctuation += (rand() % 16) + 1;
-		//			if (strcmp(CoinNames[i], "이더리음") == 0) Fluctuation += (rand() % 70) + 1;
-		//			if (strcmp(CoinNames[i], "체인링쿠") == 0) Fluctuation += (rand() % 30) + 1;
-		//			if (strcmp(CoinNames[i], "칠리츠") == 0) Fluctuation += (rand() % 11) + 1;
-		//			if (strcmp(CoinNames[i], "코스모수") == 0) Fluctuation += (rand() % 18) + 1;
-		//			if (strcmp(CoinNames[i], "폴리콘") == 0) Fluctuation += (rand() % 11) + 1;
-		//			if (strcmp(CoinNames[i], "풀로우") == 0) Fluctuation += (rand() % 18) + 1;
-		//			if (strcmp(CoinNames[i], "헌투") == 0) Fluctuation += (rand() % 6) + 1;
-		//		}
-		//		else // 하락 36%
-		//		{
-		//			if (strcmp(CoinNames[i], "가자코인") == 0) Fluctuation -= (rand() % 10) + 1;
-		//			if (strcmp(CoinNames[i], "까스") == 0) Fluctuation -= (rand() % 20) + 1;
-		//			if (strcmp(CoinNames[i], "디카르코") == 0) Fluctuation -= (rand() % 4) + 1;
-		//			if (strcmp(CoinNames[i], "람다토큰") == 0) Fluctuation -= (rand() % 10) + 1;
-		//			if (strcmp(CoinNames[i], "리퍼리음") == 0) Fluctuation -= (rand() % 2) + 1;
-		//			if (strcmp(CoinNames[i], "리풀") == 0) Fluctuation -= (rand() % 4) + 1;
-		//			if (strcmp(CoinNames[i], "비투코인") == 0) Fluctuation -= (rand() % 100) + 1;
-		//			if (strcmp(CoinNames[i], "새럼") == 0) Fluctuation -= (rand() % 3) + 1;
-		//			if (strcmp(CoinNames[i], "서브프레임") == 0) Fluctuation -= (rand() % 2) + 1;
-		//			if (strcmp(CoinNames[i], "센드박스") == 0) Fluctuation -= (rand() % 11) + 1;
-		//			if (strcmp(CoinNames[i], "솔리나") == 0) Fluctuation -= (rand() % 30) + 1;
-		//			if (strcmp(CoinNames[i], "스틤") == 0) Fluctuation -= (rand() % 7) + 1;
-		//			if (strcmp(CoinNames[i], "스틤달러") == 0) Fluctuation -= (rand() % 15) + 1;
-		//			if (strcmp(CoinNames[i], "승환토큰") == 0) Fluctuation -= (rand() % 3) + 1;
-		//			if (strcmp(CoinNames[i], "시바코인") == 0) Fluctuation -= (rand() % 4) + 1;
-		//			if (strcmp(CoinNames[i], "썸띵") == 0) Fluctuation -= (rand() % 6) + 1;
-		//			if (strcmp(CoinNames[i], "아르곳") == 0) Fluctuation -= (rand() % 6) + 1;
-		//			if (strcmp(CoinNames[i], "아이쿠") == 0) Fluctuation -= (rand() % 2) + 1;
-		//			if (strcmp(CoinNames[i], "아화토큰") == 0) Fluctuation -= (rand() % 4) + 1;
-		//			if (strcmp(CoinNames[i], "앱토수") == 0) Fluctuation -= (rand() % 17) + 1;
-		//			if (strcmp(CoinNames[i], "에이더") == 0) Fluctuation -= (rand() % 15) + 1;
-		//			if (strcmp(CoinNames[i], "엑스인피니티") == 0) Fluctuation -= (rand() % 20) + 1;
-		//			if (strcmp(CoinNames[i], "웨이부") == 0) Fluctuation -= (rand() % 12) + 1;
-		//			if (strcmp(CoinNames[i], "위밋스") == 0) Fluctuation -= (rand() % 16) + 1;
-		//			if (strcmp(CoinNames[i], "이더리음") == 0) Fluctuation -= (rand() % 70) + 1;
-		//			if (strcmp(CoinNames[i], "체인링쿠") == 0) Fluctuation -= (rand() % 30) + 1;
-		//			if (strcmp(CoinNames[i], "칠리츠") == 0) Fluctuation -= (rand() % 11) + 1;
-		//			if (strcmp(CoinNames[i], "코스모수") == 0) Fluctuation -= (rand() % 18) + 1;
-		//			if (strcmp(CoinNames[i], "폴리콘") == 0) Fluctuation -= (rand() % 11) + 1;
-		//			if (strcmp(CoinNames[i], "풀로우") == 0) Fluctuation -= (rand() % 18) + 1;
-		//			if (strcmp(CoinNames[i], "헌투") == 0) Fluctuation -= (rand() % 6) + 1;
-		//		}
-		//		if (CoinNewsEffect[i] != 0)
-		//		{
-		//			int Percentage = rand() % 5 + 1; // 뉴스 있을 경우, 변동폭 확률 
-		//			Fluctuation += ((abs(CoinPrice[i] - Fluctuation) / 2) * Percentage) * CoinNewsEffect[i]; // 뉴스 있음 : 추가 변동률 적용 
-		//		}
-		//		if (Fluctuation < CoinLowPrice[i]) CoinLowPrice[i] = Fluctuation; // 저가
-		//		if (Fluctuation > CoinHighPrice[i]) CoinHighPrice[i] = Fluctuation; // 고가
-		//		if (CoinLowPrice[i] < 0) CoinLowPrice[i] = 0; // 저가 0원 보정
-		//		if (Fluctuation < CoinLowPrice1[i]) CoinLowPrice1[i] = Fluctuation; // 저가 - 1시간 
-		//		if (Fluctuation > CoinHighPrice1[i]) CoinHighPrice1[i] = Fluctuation; // 고가 - 1시간 
-		//		if (CoinLowPrice1[i] < 0) CoinLowPrice1[i] = 0; // 저가 0원 보정 - 1시간 
-		//		if (CoinDelistingTerm[i] == 0) // 재상장
-		//		{
-		//			CoinDelisted[i] = 0; // 재상장
-		//			CoinNewsEffect[i] = 1; // 재상장시 상승률 보장
-		//			sprintf(CoinNews[i], "%s 재상장!", CoinNames[i]);
-		//			if (strcmp(CoinNames[i], "가자코인") == 0) CoinPrice[i] = 4000;
-		//			if (strcmp(CoinNames[i], "까스") == 0) CoinPrice[i] = 12000;
-		//			if (strcmp(CoinNames[i], "디카르코") == 0) CoinPrice[i] = 520;
-		//			if (strcmp(CoinNames[i], "람다토큰") == 0) CoinPrice[i] = 200;
-		//			if (strcmp(CoinNames[i], "리퍼리음") == 0) CoinPrice[i] = 190;
-		//			if (strcmp(CoinNames[i], "리풀") == 0) CoinPrice[i] = 830;
-		//			if (strcmp(CoinNames[i], "비투코인") == 0) CoinPrice[i] = 3500000;
-		//			if (strcmp(CoinNames[i], "새럼") == 0) CoinPrice[i] = 1100;
-		//			if (strcmp(CoinNames[i], "서브프레임") == 0) CoinPrice[i] = 30;
-		//			if (strcmp(CoinNames[i], "센드박스") == 0) CoinPrice[i] = 260;
-		//			if (strcmp(CoinNames[i], "솔리나") == 0) CoinPrice[i] = 23000;
-		//			if (strcmp(CoinNames[i], "스틤") == 0) CoinPrice[i] = 600;
-		//			if (strcmp(CoinNames[i], "스틤달러") == 0) CoinPrice[i] = 1200;
-		//			if (strcmp(CoinNames[i], "승환토큰") == 0) CoinPrice[i] = 100;
-		//			if (strcmp(CoinNames[i], "시바코인") == 0) CoinPrice[i] = 140;
-		//			if (strcmp(CoinNames[i], "썸띵") == 0) CoinPrice[i] = 94;
-		//			if (strcmp(CoinNames[i], "아르곳") == 0) CoinPrice[i] = 110;
-		//			if (strcmp(CoinNames[i], "아이쿠") == 0) CoinPrice[i] = 46;
-		//			if (strcmp(CoinNames[i], "아화토큰") == 0) CoinPrice[i] = 148;
-		//			if (strcmp(CoinNames[i], "앱토수") == 0) CoinPrice[i] = 8000;
-		//			if (strcmp(CoinNames[i], "에이더") == 0) CoinPrice[i] = 260;
-		//			if (strcmp(CoinNames[i], "엑스인피니티") == 0) CoinPrice[i] = 8500;
-		//			if (strcmp(CoinNames[i], "웨이부") == 0) CoinPrice[i] = 1900;
-		//			if (strcmp(CoinNames[i], "위밋스") == 0) CoinPrice[i] = 630;
-		//			if (strcmp(CoinNames[i], "이더리음") == 0) CoinPrice[i] = 1250000;
-		//			if (strcmp(CoinNames[i], "체인링쿠") == 0) CoinPrice[i] = 11500;
-		//			if (strcmp(CoinNames[i], "칠리츠") == 0) CoinPrice[i] = 130;
-		//			if (strcmp(CoinNames[i], "코스모수") == 0) CoinPrice[i] = 4000;
-		//			if (strcmp(CoinNames[i], "폴리콘") == 0) CoinPrice[i] = 1300;
-		//			if (strcmp(CoinNames[i], "풀로우") == 0) CoinPrice[i] = 1050;
-		//			if (strcmp(CoinNames[i], "헌투") == 0) CoinPrice[i] = 75;
-		//			CoinNewsTerm[i] = 600; // 10분 동안 재상장 알림
-		//			sprintf(Query, "UPDATE coinlist SET Price=%d, Delisting=0, DelistingCount=-1, News='%s', NewsContinuous=%d, NewsEffect=%d WHERE CoinName='%s'", CoinPrice[i], CoinNews[i], CoinNewsTerm[i], CoinNewsEffect[i], CoinNames[i]);
-		//			ExcuteQuery(Connect, Query);
-		//			continue;
-		//		}
-		//		if (Fluctuation <= 0 && CoinDelisted[i] == 0) // 최초 상장 폐지
-		//		{
-		//			Fluctuation = 0;
-		//			sprintf(CoinNews[i], "%s 상장폐지!", CoinNames[i]);
-		//			CoinDelistingTerm[i] = 600 + rand() % 150; // 최소 10분 이상 상폐
-		//			CoinNewsTerm[i] = CoinDelistingTerm[i];
-		//			sprintf(Query, "UPDATE coinlist SET Price=0, Delisting=1, DelistingCount=%d, News='%s', NewsContinuous=%d, NewsEffect=0 WHERE CoinName='%s'", CoinDelistingTerm[i], CoinNews[i], CoinNewsTerm[i], CoinNames[i]);
-		//			ExcuteQuery(Connect, Query);
-		//			continue;
-		//		}
-		//		if (CoinDelisted[i] == 1 && CoinDelistingTerm[i] != -1) // 상장 폐지 중
-		//		{
-		//			sprintf(Query, "UPDATE coinlist SET Price=0, DelistingCount=%d, NewsContinuous=%d WHERE CoinName='%s' AND Delisting=1", --CoinDelistingTerm[i], --CoinNewsTerm[i], CoinNames[i]);
-		//		}
-		//		else
-		//		{
-		//			NewCardIssue(CoinNames[i], CoinNews[i], &CoinNewsTerm[i], &CoinNewsEffect[i]);
-		//			sprintf(Query, "UPDATE coinlist SET Price=%d, Delisting=%d, News='%s', NewsContinuous=%d, NewsEffect=%d WHERE CoinName='%s' AND Delisting=0", Fluctuation, CoinDelisted[i], CoinNews[i], --CoinNewsTerm[i], CoinNewsEffect[i], CoinNames[i]);
-		//		}
-		//		ExcuteQuery(Connect, Query);
-		//	}
-		//	Sleep(2000); // 2초
-		//}
+				/* 2년치 데이터 저장 */
+				sprintf_s(Query, sizeof(Query), "SELECT COUNT(*) FROM coinshistory");
+				Result = ExcuteQuery(Connect, Query);
+				if (Rows = mysql_fetch_row(Result))
+				{
+					if (atoi(Rows[0]) > 4200000)
+					{
+						printf("삭제");
+					}
+				}
+				IsBackup = true;
+			}
+
+			for (int coin = 0; coin < CoinCount; coin++)
+			{
+				int newsEffectValue = 0; // 코인 뉴스에 따른 추가 변동폭
+				int defaultFluctuationValue = CoinFluctuationRate[coin]; // 기본 변동폭 조정
+				int priceFlucDiddle = rand() % 4 + 1; // 기본 변동폭 조정 확률
+				int priceDiddle = rand() % 100 + 1; // 시가 변동 확률
+				switch (priceFlucDiddle) // 25% 확률
+				{
+				case 1:
+					defaultFluctuationValue = defaultFluctuationValue / 4; // 기본 변동률의 25%
+					break;
+				case 2:
+					defaultFluctuationValue = defaultFluctuationValue / 2; // 기본 변동률의 50%
+					break;
+				case 3:
+					defaultFluctuationValue = defaultFluctuationValue * 3 / 4;  // 기본 변동률의 75%
+					break;
+				default:  // 기본 변동률의 100%
+					break;
+				}
+				newsEffectValue = CoinNewsEffect[coin] * (CoinFluctuationRate[coin] / 5); // 추가 뉴스 변동폭 = 뉴스영향력 * (기본 변동값 * 20%)
+
+				if (priceDiddle > 65) CoinPrice[coin] += defaultFluctuationValue + newsEffectValue; // 상승률: 35%
+				else if (priceDiddle > 30) CoinPrice[coin] -= defaultFluctuationValue - newsEffectValue; // 하락률: 35%
+				// 변동 없음: 30%
+
+				if (CoinPrice[coin] < CoinLowPrice[coin]) CoinLowPrice[coin] = CoinPrice[coin]; // 저가
+				if (CoinPrice[coin] > CoinHighPrice[coin]) CoinHighPrice[coin] = CoinPrice[coin]; // 고가
+
+				// 재상장: 상폐기간 == 0 && 상장폐지 상태 == true (1회성)
+				if (CoinDelisted[coin] == 1 && CoinDelistingTerm[coin] == 0)
+				{
+					CoinPrice[coin] = CoinDefaultPrice[coin];
+					CoinDelisted[coin] = 0;
+					CoinDelistingTerm[coin] = -1;
+					CoinNewsEffect[coin] = 2; // 재상장시 상승률 보장
+					sprintf_s(CoinNews[coin], CoinNewsBufferSize, "%s 재상장!", CoinNames[coin]);
+					CoinNewsTerm[coin] = 1800; // 1시간 재상장 뉴스 지속
+					sprintf_s(Query, sizeof(Query), "UPDATE coins SET price=%d, delisted=0, delistingTerm=-1, news='%s', newsTerm=%d, newsEffect=%d WHERE coinName='%s'", CoinDefaultPrice[coin], CoinNews[coin], CoinNewsTerm[coin], CoinNewsEffect[coin], CoinNames[coin]);
+					ExcuteQuery(Connect, Query);
+					continue;
+				}
+
+				// 상장폐지: 현재가 < 1 && 상장폐지 상태 == false (1회성)
+				if (CoinPrice[coin] < 1 && CoinDelisted[coin] == 0)
+				{
+					CoinPrice[coin] = 0;
+					CoinDelisted[coin] = 1; // 상장폐지
+					CoinDelistingTerm[coin] = 1800 + rand() % 1800; // 1~2시간 상장폐지
+					CoinNewsEffect[coin] = 0;
+					sprintf_s(CoinNews[coin], CoinNewsBufferSize, "%s 상장폐지!", CoinNames[coin]);
+					CoinNewsTerm[coin] = CoinDelistingTerm[coin];
+					sprintf_s(Query, sizeof(Query), "UPDATE coins SET price=0, delisted=1, delistingTerm=%d, news='%s', newsTerm=%d, newsEffect=0 WHERE coinName='%s'", CoinDelistingTerm[coin], CoinNews[coin], CoinNewsTerm[coin], CoinNames[coin]);
+					ExcuteQuery(Connect, Query);
+					continue;
+				}
+
+				// 상장 폐지 중: 상장폐지 상태 == true
+				if (CoinDelisted[coin] == 1)
+				{
+					sprintf_s(Query, sizeof(Query), "UPDATE coins SET delistingTerm=%d, newsTerm=%d WHERE coinName='%s'", --CoinDelistingTerm[coin], --CoinNewsTerm[coin], CoinNames[coin]);
+					ExcuteQuery(Connect, Query);
+					continue;
+				}
+				if (CoinDelistingTerm[coin] < -1) CoinDelistingTerm[coin] = -1; // 상폐기간 -1 보정
+
+				// 상장중: 상장폐지 상태 == false && 코인 가격 > 0
+				if (CoinDelisted[coin] == 0 && CoinPrice[coin] > 0)
+				{
+					if (CoinNewsTerm[coin] < 1)
+					{
+						CoinNewsTerm[coin] = 900 + rand() % 2700; // 30분~2시간 뉴스 지속
+						NewCardIssue(CoinNames[coin], CoinNews[coin], &CoinNewsEffect[coin]); // 뉴스 발급
+					}
+					sprintf_s(Query, sizeof(Query), "UPDATE coins SET price=%d, news='%s', newsTerm=%d, newsEffect=%d WHERE coinName='%s'", CoinPrice[coin], CoinNews[coin], --CoinNewsTerm[coin], CoinNewsEffect[coin], CoinNames[coin]);
+					ExcuteQuery(Connect, Query);
+				}
+			}
+			Sleep(2000);
+		}
 		mysql_close(Connect);
 	}
 	else printf("DB Connection Fail\n\n");
@@ -456,15 +316,16 @@ MYSQL_RES* ExcuteQuery(MYSQL* connect, char query[])
 	}
 }
 
-void BackupData(char names[][30], int opening[], int closing[], int low[], int high[], bool delisted[])
+void InsertData(MYSQL* connect, char* query, char* CoinName, int opening, int closing, int low, int high, bool delisted)
 {
-
+	sprintf_s(query, 400, "INSERT INTO coinshistory(coinName, historyTime, openingPrice, closingPrice, lowPrice, highPrice, delisted) VALUES('%s', NOW(), %d, %d, %d, %d, %d)", CoinName, opening, closing, low, high, (int)delisted);
+	ExcuteQuery(connect, query);
 }
 
-void NewCardIssue(char* CoinName, char* CoinNews, int* NewsContinuous, int* NewsEffect)
+void NewCardIssue(char* CoinName, char* CoinNews, int* NewsEffect)
 {
-	int randomNews = rand() % 5;
-	if (strcmp(CoinName, "가자코인") == 0 && *NewsContinuous == 0) // 뉴스가 없을 때
+	int randomNews = rand() % 6;
+	if (strcmp(CoinName, "가자코인") == 0)
 	{
 		switch (randomNews)
 		{
@@ -485,13 +346,12 @@ void NewCardIssue(char* CoinName, char* CoinNews, int* NewsContinuous, int* News
 			*NewsEffect = -5;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 3 ~ 4 뉴스 없음. 3 / 5 확률로 뉴스 
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 뉴스 없음. 2 / 3 확률로 뉴스
 			*NewsEffect = 0;
 			break;
 		}
-		*NewsContinuous = 300 + rand() % 150; // 5분 이상 지속
 	}
-	else if (strcmp(CoinName, "까스") == 0 && *NewsContinuous == 0) // 뉴스가 없을 때
+	else if (strcmp(CoinName, "까스") == 0)
 	{
 		switch (randomNews)
 		{
@@ -512,13 +372,12 @@ void NewCardIssue(char* CoinName, char* CoinNews, int* NewsContinuous, int* News
 			*NewsEffect = -1;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 3 ~ 4 뉴스 없음. 3 / 5 확률로 뉴스 
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 뉴스 없음. 2 / 3 확률로 뉴스
 			*NewsEffect = 0;
 			break;
 		}
-		*NewsContinuous = 300 + rand() % 150; // 5분 이상 지속
 	}
-	else if (strcmp(CoinName, "디카르코") == 0 && *NewsContinuous == 0)
+	else if (strcmp(CoinName, "디카르코") == 0)
 	{
 		switch (randomNews)
 		{
@@ -539,13 +398,12 @@ void NewCardIssue(char* CoinName, char* CoinNews, int* NewsContinuous, int* News
 			*NewsEffect = -2;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 3 ~ 4 뉴스 없음. 3 / 5 확률로 뉴스 
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 뉴스 없음. 2 / 3 확률로 뉴스
 			*NewsEffect = 0; // 상승세 보장 (상승률:50%)
 			break;
 		}
-		*NewsContinuous = 300 + rand() % 150; // 5분 이상 지속
 	}
-	else if (strcmp(CoinName, "람다토큰") == 0 && *NewsContinuous == 0)
+	else if (strcmp(CoinName, "람다토큰") == 0)
 	{
 		switch (randomNews)
 		{
@@ -566,13 +424,12 @@ void NewCardIssue(char* CoinName, char* CoinNews, int* NewsContinuous, int* News
 			*NewsEffect = -1;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 3 ~ 4 뉴스 없음. 3 / 5 확률로 뉴스 
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 뉴스 없음. 2 / 3 확률로 뉴스
 			*NewsEffect = 0; // 상승세 보장 (상승률:50%)
 			break;
 		}
-		*NewsContinuous = 300 + rand() % 150; // 5분 이상 지속
 	}
-	else if (strcmp(CoinName, "리퍼리음") == 0 && *NewsContinuous == 0)
+	else if (strcmp(CoinName, "리퍼리음") == 0)
 	{
 		switch (randomNews)
 		{
@@ -593,13 +450,12 @@ void NewCardIssue(char* CoinName, char* CoinNews, int* NewsContinuous, int* News
 			*NewsEffect = -5;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 3 ~ 4 뉴스 없음. 3 / 5 확률로 뉴스 
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 뉴스 없음. 2 / 3 확률로 뉴스
 			*NewsEffect = 0; // 상승세 보장 (상승률:50%)
 			break;
 		}
-		*NewsContinuous = 300 + rand() % 150; // 5분 이상 지속
 	}
-	else if (strcmp(CoinName, "리풀") == 0 && *NewsContinuous == 0)
+	else if (strcmp(CoinName, "리풀") == 0)
 	{
 		switch (randomNews)
 		{
@@ -620,13 +476,12 @@ void NewCardIssue(char* CoinName, char* CoinNews, int* NewsContinuous, int* News
 			*NewsEffect = -4;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 3 ~ 4 뉴스 없음. 3 / 5 확률로 뉴스 
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 뉴스 없음. 2 / 3 확률로 뉴스
 			*NewsEffect = 0; // 상승세 보장 (상승률:50%)
 			break;
 		}
-		*NewsContinuous = 300 + rand() % 150; // 5분 이상 지속
 	}
-	else if (strcmp(CoinName, "비투코인") == 0 && *NewsContinuous == 0)
+	else if (strcmp(CoinName, "비투코인") == 0)
 	{
 		switch (randomNews)
 		{
@@ -647,13 +502,12 @@ void NewCardIssue(char* CoinName, char* CoinNews, int* NewsContinuous, int* News
 			*NewsEffect = -5;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 3 ~ 4 뉴스 없음. 3 / 5 확률로 뉴스 
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 뉴스 없음. 2 / 3 확률로 뉴스
 			*NewsEffect = 0; // 상승세 보장 (상승률:50%)
 			break;
 		}
-		*NewsContinuous = 300 + rand() % 150; // 5분 이상 지속
 	}
-	else if (strcmp(CoinName, "새럼") == 0 && *NewsContinuous == 0)
+	else if (strcmp(CoinName, "새럼") == 0)
 	{
 		switch (randomNews)
 		{
@@ -674,13 +528,12 @@ void NewCardIssue(char* CoinName, char* CoinNews, int* NewsContinuous, int* News
 			*NewsEffect = -4;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 3 ~ 4 뉴스 없음. 3 / 5 확률로 뉴스 
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 뉴스 없음. 2 / 3 확률로 뉴스
 			*NewsEffect = 0; // 상승세 보장 (상승률:50%)
 			break;
 		}
-		*NewsContinuous = 300 + rand() % 150; // 5분 이상 지속
 	}
-	else if (strcmp(CoinName, "서브프레임") == 0 && *NewsContinuous == 0)
+	else if (strcmp(CoinName, "서브프레임") == 0)
 	{
 		switch (randomNews)
 		{
@@ -701,13 +554,12 @@ void NewCardIssue(char* CoinName, char* CoinNews, int* NewsContinuous, int* News
 			*NewsEffect = -3;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 3 ~ 4 뉴스 없음. 3 / 5 확률로 뉴스 
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 뉴스 없음. 2 / 3 확률로 뉴스
 			*NewsEffect = 0; // 상승세 보장 (상승률:50%)
 			break;
 		}
-		*NewsContinuous = 300 + rand() % 150; // 5분 이상 지속
 	}
-	else if (strcmp(CoinName, "센드박스") == 0 && *NewsContinuous == 0)
+	else if (strcmp(CoinName, "센드박스") == 0)
 	{
 		switch (randomNews)
 		{
@@ -728,13 +580,12 @@ void NewCardIssue(char* CoinName, char* CoinNews, int* NewsContinuous, int* News
 			*NewsEffect = -2;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 3 ~ 4 뉴스 없음. 3 / 5 확률로 뉴스 
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 뉴스 없음. 2 / 3 확률로 뉴스
 			*NewsEffect = 0; // 상승세 보장 (상승률:50%) 
 			break;
 		}
-		*NewsContinuous = 300 + rand() % 150; // 5분 이상 지속
 	}
-	else if (strcmp(CoinName, "솔리나") == 0 && *NewsContinuous == 0)
+	else if (strcmp(CoinName, "솔리나") == 0)
 	{
 		switch (randomNews)
 		{
@@ -755,13 +606,12 @@ void NewCardIssue(char* CoinName, char* CoinNews, int* NewsContinuous, int* News
 			*NewsEffect = 0;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 3 ~ 4 뉴스 없음. 3 / 5 확률로 뉴스 
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 뉴스 없음. 2 / 3 확률로 뉴스
 			*NewsEffect = 0; // 상승세 보장 (상승률:50%)
 			break;
 		}
-		*NewsContinuous = 300 + rand() % 150; // 5분 이상 지속
 	}
-	else if (strcmp(CoinName, "스틤") == 0 && *NewsContinuous == 0)
+	else if (strcmp(CoinName, "스틤") == 0)
 	{
 		switch (randomNews)
 		{
@@ -782,13 +632,12 @@ void NewCardIssue(char* CoinName, char* CoinNews, int* NewsContinuous, int* News
 			*NewsEffect = 0;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 3 ~ 4 뉴스 없음. 3 / 5 확률로 뉴스 
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 뉴스 없음. 2 / 3 확률로 뉴스
 			*NewsEffect = 0; // 상승세 보장 (상승률:50%)
 			break;
 		}
-		*NewsContinuous = 300 + rand() % 150; // 5분 이상 지속
 	}
-	else if (strcmp(CoinName, "스틤달러") == 0 && *NewsContinuous == 0)
+	else if (strcmp(CoinName, "스틤달러") == 0)
 	{
 		switch (randomNews)
 		{
@@ -809,13 +658,12 @@ void NewCardIssue(char* CoinName, char* CoinNews, int* NewsContinuous, int* News
 			*NewsEffect = 0;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 3 ~ 4 뉴스 없음. 3 / 5 확률로 뉴스 
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 뉴스 없음. 2 / 3 확률로 뉴스
 			*NewsEffect = 0; // 상승세 보장 (상승률:50%)
 			break;
 		}
-		*NewsContinuous = 300 + rand() % 150; // 5분 이상 지속
 	}
-	else if (strcmp(CoinName, "승환토큰") == 0 && *NewsContinuous == 0) // 뉴스가 없을 때
+	else if (strcmp(CoinName, "승환토큰") == 0)
 	{
 		switch (randomNews)
 		{
@@ -836,13 +684,12 @@ void NewCardIssue(char* CoinName, char* CoinNews, int* NewsContinuous, int* News
 			*NewsEffect = -3;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 3 ~ 4 뉴스 없음. 3 / 5 확률로 뉴스 
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 뉴스 없음. 2 / 3 확률로 뉴스
 			*NewsEffect = 0;
 			break;
 		}
-		*NewsContinuous = 300 + rand() % 150; // 5분 이상 지속
 	}
-	else if (strcmp(CoinName, "시바코인") == 0 && *NewsContinuous == 0)
+	else if (strcmp(CoinName, "시바코인") == 0)
 	{
 		switch (randomNews)
 		{
@@ -863,13 +710,12 @@ void NewCardIssue(char* CoinName, char* CoinNews, int* NewsContinuous, int* News
 			*NewsEffect = -4;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 3 ~ 4 뉴스 없음. 3 / 5 확률로 뉴스 
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 뉴스 없음. 2 / 3 확률로 뉴스
 			*NewsEffect = 0; // 상승세 보장 (상승률:50%)
 			break;
 		}
-		*NewsContinuous = 300 + rand() % 150; // 5분 이상 지속
 	}
-	else if (strcmp(CoinName, "썸띵") == 0 && *NewsContinuous == 0)
+	else if (strcmp(CoinName, "썸띵") == 0)
 	{
 		switch (randomNews)
 		{
@@ -890,13 +736,12 @@ void NewCardIssue(char* CoinName, char* CoinNews, int* NewsContinuous, int* News
 			*NewsEffect = 0;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 3 ~ 4 뉴스 없음. 3 / 5 확률로 뉴스 
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 뉴스 없음. 2 / 3 확률로 뉴스
 			*NewsEffect = 0; // 상승세 보장 (상승률:50%)
 			break;
 		}
-		*NewsContinuous = 300 + rand() % 150; // 5분 이상 지속
 	}
-	else if (strcmp(CoinName, "아르곳") == 0 && *NewsContinuous == 0)
+	else if (strcmp(CoinName, "아르곳") == 0)
 	{
 		switch (randomNews)
 		{
@@ -917,13 +762,12 @@ void NewCardIssue(char* CoinName, char* CoinNews, int* NewsContinuous, int* News
 			*NewsEffect = 0;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 3 ~ 4 뉴스 없음. 3 / 5 확률로 뉴스 
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 뉴스 없음. 2 / 3 확률로 뉴스
 			*NewsEffect = 0; // 상승세 보장 (상승률:50%)
 			break;
 		}
-		*NewsContinuous = 300 + rand() % 150; // 5분 이상 지속
 	}
-	else if (strcmp(CoinName, "아이쿠") == 0 && *NewsContinuous == 0)
+	else if (strcmp(CoinName, "아이쿠") == 0)
 	{
 		switch (randomNews)
 		{
@@ -944,13 +788,12 @@ void NewCardIssue(char* CoinName, char* CoinNews, int* NewsContinuous, int* News
 			*NewsEffect = 0;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 3 ~ 4 뉴스 없음. 3 / 5 확률로 뉴스 
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 뉴스 없음. 2 / 3 확률로 뉴스
 			*NewsEffect = 0; // 상승세 보장 (상승률:50%)
 			break;
 		}
-		*NewsContinuous = 300 + rand() % 150; // 5분 이상 지속
 	}
-	else if (strcmp(CoinName, "아화토큰") == 0 && *NewsContinuous == 0)
+	else if (strcmp(CoinName, "아화토큰") == 0)
 	{
 		switch (randomNews)
 		{
@@ -971,13 +814,12 @@ void NewCardIssue(char* CoinName, char* CoinNews, int* NewsContinuous, int* News
 			*NewsEffect = 0;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 3 ~ 4 뉴스 없음. 3 / 5 확률로 뉴스 
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 뉴스 없음. 2 / 3 확률로 뉴스
 			*NewsEffect = 0; // 상승세 보장 (상승률:50%)
 			break;
 		}
-		*NewsContinuous = 300 + rand() % 150; // 5분 이상 지속
 	}
-	else if (strcmp(CoinName, "앱토수") == 0 && *NewsContinuous == 0)
+	else if (strcmp(CoinName, "앱토수") == 0)
 	{
 		switch (randomNews)
 		{
@@ -998,13 +840,12 @@ void NewCardIssue(char* CoinName, char* CoinNews, int* NewsContinuous, int* News
 			*NewsEffect = -2;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 3 ~ 4 뉴스 없음. 3 / 5 확률로 뉴스 
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 뉴스 없음. 2 / 3 확률로 뉴스
 			*NewsEffect = 0; // 상승세 보장 (상승률:50%)
 			break;
 		}
-		*NewsContinuous = 300 + rand() % 150; // 5분 이상 지속
 	}
-	else if (strcmp(CoinName, "에이더") == 0 && *NewsContinuous == 0)
+	else if (strcmp(CoinName, "에이더") == 0)
 	{
 		switch (randomNews)
 		{
@@ -1025,13 +866,12 @@ void NewCardIssue(char* CoinName, char* CoinNews, int* NewsContinuous, int* News
 			*NewsEffect = 0;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 3 ~ 4 뉴스 없음. 3 / 5 확률로 뉴스 
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 뉴스 없음. 2 / 3 확률로 뉴스
 			*NewsEffect = 0; // 상승세 보장 (상승률:50%)
 			break;
 		}
-		*NewsContinuous = 300 + rand() % 150; // 5분 이상 지속
 	}
-	else if (strcmp(CoinName, "엑스인피니티") == 0 && *NewsContinuous == 0)
+	else if (strcmp(CoinName, "엑스인피니티") == 0)
 	{
 		switch (randomNews)
 		{
@@ -1052,13 +892,12 @@ void NewCardIssue(char* CoinName, char* CoinNews, int* NewsContinuous, int* News
 			*NewsEffect = 0;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 3 ~ 4 뉴스 없음. 3 / 5 확률로 뉴스 
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 뉴스 없음. 2 / 3 확률로 뉴스
 			*NewsEffect = 0; // 상승세 보장 (상승률:50%)
 			break;
 		}
-		*NewsContinuous = 300 + rand() % 150; // 5분 이상 지속
 	}
-	else if (strcmp(CoinName, "웨이부") == 0 && *NewsContinuous == 0)
+	else if (strcmp(CoinName, "웨이부") == 0)
 	{
 		switch (randomNews)
 		{
@@ -1079,13 +918,12 @@ void NewCardIssue(char* CoinName, char* CoinNews, int* NewsContinuous, int* News
 			*NewsEffect = 0;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 3 ~ 4 뉴스 없음. 3 / 5 확률로 뉴스 
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 뉴스 없음. 2 / 3 확률로 뉴스
 			*NewsEffect = 0; // 상승세 보장 (상승률:50%)
 			break;
 		}
-		*NewsContinuous = 300 + rand() % 150; // 5분 이상 지속
 	}
-	else if (strcmp(CoinName, "위밋스") == 0 && *NewsContinuous == 0)
+	else if (strcmp(CoinName, "위밋스") == 0)
 	{
 		switch (randomNews)
 		{
@@ -1106,13 +944,12 @@ void NewCardIssue(char* CoinName, char* CoinNews, int* NewsContinuous, int* News
 			*NewsEffect = 0;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 3 ~ 4 뉴스 없음. 3 / 5 확률로 뉴스 
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 뉴스 없음. 2 / 3 확률로 뉴스
 			*NewsEffect = 0; // 상승세 보장 (상승률:50%)
 			break;
 		}
-		*NewsContinuous = 300 + rand() % 150; // 5분 이상 지속
 	}
-	else if (strcmp(CoinName, "이더리음") == 0 && *NewsContinuous == 0)
+	else if (strcmp(CoinName, "이더리음") == 0)
 	{
 		switch (randomNews)
 		{
@@ -1132,13 +969,12 @@ void NewCardIssue(char* CoinName, char* CoinNews, int* NewsContinuous, int* News
 			sprintf_s(CoinNews, CoinNewsBufferSize, "블록체인 암호화 기술의 발전, 채굴하기 더 어려워져...");
 			*NewsEffect = -4;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 3 ~ 4 뉴스 없음. 3 / 5 확률로 뉴스 
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 뉴스 없음. 2 / 3 확률로 뉴스
 			*NewsEffect = 0; // 상승세 보장 (상승률:50%)
 			break;
 		}
-		*NewsContinuous = 300 + rand() % 150; // 5분 이상 지속
 	}
-	else if (strcmp(CoinName, "체인링쿠") == 0 && *NewsContinuous == 0)
+	else if (strcmp(CoinName, "체인링쿠") == 0)
 	{
 		switch (randomNews)
 		{
@@ -1159,13 +995,12 @@ void NewCardIssue(char* CoinName, char* CoinNews, int* NewsContinuous, int* News
 			*NewsEffect = 0;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 3 ~ 4 뉴스 없음. 3 / 5 확률로 뉴스 
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 뉴스 없음. 2 / 3 확률로 뉴스
 			*NewsEffect = 0; // 상승세 보장 (상승률:50%)
 			break;
 		}
-		*NewsContinuous = 300 + rand() % 150; // 5분 이상 지속
 	}
-	else if (strcmp(CoinName, "칠리츠") == 0 && *NewsContinuous == 0)
+	else if (strcmp(CoinName, "칠리츠") == 0)
 	{
 		switch (randomNews)
 		{
@@ -1186,13 +1021,12 @@ void NewCardIssue(char* CoinName, char* CoinNews, int* NewsContinuous, int* News
 			*NewsEffect = 0;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 3 ~ 4 뉴스 없음. 3 / 5 확률로 뉴스 
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 뉴스 없음. 2 / 3 확률로 뉴스
 			*NewsEffect = 0; // 상승세 보장 (상승률:50%)
 			break;
 		}
-		*NewsContinuous = 300 + rand() % 150; // 5분 이상 지속
 	}
-	else if (strcmp(CoinName, "코스모수") == 0 && *NewsContinuous == 0)
+	else if (strcmp(CoinName, "코스모수") == 0)
 	{
 		switch (randomNews)
 		{
@@ -1213,13 +1047,12 @@ void NewCardIssue(char* CoinName, char* CoinNews, int* NewsContinuous, int* News
 			*NewsEffect = 0;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 3 ~ 4 뉴스 없음. 3 / 5 확률로 뉴스 
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 뉴스 없음. 2 / 3 확률로 뉴스
 			*NewsEffect = 0; // 상승세 보장 (상승률:50%)
 			break;
 		}
-		*NewsContinuous = 300 + rand() % 150; // 5분 이상 지속
 	}
-	else if (strcmp(CoinName, "폴리콘") == 0 && *NewsContinuous == 0)
+	else if (strcmp(CoinName, "폴리콘") == 0)
 	{
 		switch (randomNews)
 		{
@@ -1240,13 +1073,12 @@ void NewCardIssue(char* CoinName, char* CoinNews, int* NewsContinuous, int* News
 			*NewsEffect = 0;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 3 ~ 4 뉴스 없음. 3 / 5 확률로 뉴스 
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 뉴스 없음. 2 / 3 확률로 뉴스
 			*NewsEffect = 0; // 상승세 보장 (상승률:50%)
 			break;
 		}
-		*NewsContinuous = 300 + rand() % 150; // 5분 이상 지속
 	}
-	else if (strcmp(CoinName, "풀로우") == 0 && *NewsContinuous == 0)
+	else if (strcmp(CoinName, "풀로우") == 0)
 	{
 		switch (randomNews)
 		{
@@ -1267,13 +1099,12 @@ void NewCardIssue(char* CoinName, char* CoinNews, int* NewsContinuous, int* News
 			*NewsEffect = 0;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 3 ~ 4 뉴스 없음. 3 / 5 확률로 뉴스 
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 뉴스 없음. 2 / 3 확률로 뉴스
 			*NewsEffect = 0; // 상승세 보장 (상승률:50%)
 			break;
 		}
-		*NewsContinuous = 300 + rand() % 150; // 5분 이상 지속
 	}
-	else if (strcmp(CoinName, "헌투") == 0 && *NewsContinuous == 0)
+	else if (strcmp(CoinName, "헌투") == 0)
 	{
 		switch (randomNews)
 		{
@@ -1294,10 +1125,9 @@ void NewCardIssue(char* CoinName, char* CoinNews, int* NewsContinuous, int* News
 			*NewsEffect = 0;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 3 ~ 4 뉴스 없음. 3 / 5 확률로 뉴스 
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 뉴스 없음. 2 / 3 확률로 뉴스
 			*NewsEffect = 0; // 상승세 보장 (상승률:50%)
 			break;
 		}
-		*NewsContinuous = 300 + rand() % 150; // 5분 이상 지속
 	}
 }
