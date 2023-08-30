@@ -55,7 +55,7 @@ int main()
 
 		sprintf_s(Query, sizeof(Query), "SELECT COUNT(*) FROM coins");
 		Result = ExcuteQuery(Connect, Query);
-		unsigned int CoinCount = 0; // 코인 개수
+		int CoinCount = 0; // 코인 개수
 		if ((Rows = mysql_fetch_row(Result)) != NULL) CoinCount = atoi(Rows[0]);
 		else { puts("DB coins테이블의 카디널리티를 가져올 수 없습니다."); mysql_close(Connect); return 0; }
 
@@ -568,7 +568,7 @@ void NewCardIssue(char* CoinName, char* CoinNews, int* NewsEffect)
 			*NewsEffect = 3;
 			break;
 		case 1:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "센드박스 51% 공격으로 이중지불 피해 발생! 알고보니 자신이 만든 게임이 안 팔린 유저들의 분노.");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "센드박스 51%% 공격으로 이중지불 피해 발생! 알고보니 자신이 만든 게임이 안 팔린 유저들의 분노.");
 			*NewsEffect = -4;
 			break;
 		case 2:

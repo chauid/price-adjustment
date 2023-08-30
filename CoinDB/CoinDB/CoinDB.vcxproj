@@ -74,6 +74,12 @@
     <IncludePath>C:\Program Files\MariaDB 10.10\include\mysql;$(IncludePath)</IncludePath>
     <LibraryPath>C:\Program Files\MariaDB 10.10\lib;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <IncludePath>C:\Program Files\MariaDB 10.10\include;$(IncludePath)</IncludePath>
+    <ExternalIncludePath>C:\Program Files\MariaDB 10.10\include\mysql;$(ExternalIncludePath)</ExternalIncludePath>
+    <ReferencePath>C:\Program Files\MariaDB 10.10\lib;$(ReferencePath)</ReferencePath>
+    <LibraryPath>C:\Program Files\MariaDB 10.10\lib;$(LibraryPath)</LibraryPath>
+  </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
@@ -114,7 +120,8 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>libmariadb.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>C:\Program Files\MariaDB 10.10\lib\libmariadb.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <Version>0.7</Version>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -131,6 +138,8 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>
+      </AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
