@@ -1,306 +1,382 @@
 ﻿#include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <string.h>
 #include <time.h>
-#include <windows.h> // windows 환경 build
-//#include <unistd.h> // linuxd 환경 build
-#include <mysql.h>
-//#include "/usr/include/mysql/mysql.h" // linux 환경 build
+#include <windows.h> // sed -i 's/#include <windows.h>/#include <unistd.h>/g' {pwd}/coindb.c
+#include <mysql.h> // sed -i '/s/#include <mysql.h>/#include \"/usr/include/mysql/mysql.h\"/g' {pwd}/coindb.c
 
-constexpr auto VERSION = "0.7"; // 현재 버전 v0.7
+#define VERSION "0.8" // 현재 버전 v0.8
 
-constexpr int CoinNameBufferSize = 30; // 코인 이름 길이: 30byte
-constexpr int CoinNewsBufferSize = 255; // 코인 뉴스 길이: 255byte
+#define READ_MAXCOUNT 50 // 한 줄 최대 입력 수
+
+#define CoinNameBufferSize 30 // 코인 이름 길이: 30byte
+#define CoinNewsBufferSize 255 // 코인 뉴스 길이: 255byte
+#define QueryBufferSize 512 // 쿼리 길이
+#define TickInterval 2000 // 업데이트 대기시간(ms)
 
 /**
  * @brief 쿼리 실행 함수
  * @param MYSQL* Connect 변수, char[] 쿼리
  * @return mysql_store_result(Connect)의 값
  */
-MYSQL_RES* ExcuteQuery(MYSQL* connect, char query[]);
-
-/**
- * @brief coinshistory테이블에 INSERT 수행
- * @param 코인명, 시가, 종가, 저가, 고가, 상폐여부
- */
-void InsertData(MYSQL* connect, char* query, char* CoinName, int opening, int closing, int low, int high, bool delisted);
+MYSQL_RES* ExcuteQuery(MYSQL* connect, const char* query);
 
 /**
  * @brief 뉴스 카드 발급 함수
- * @param 코인명, 변경 대상 뉴스, 뉴스 지속 시간, 뉴스 영향력
+ * @param 코인ID, 변경 대상 뉴스, 뉴스 지속 시간, 뉴스 영향력
  */
-void NewCardIssue(char* CoinName, char* CoinNews, int* NewsEffect);
+void NewsCardIssue(char* CoinName, char* CoinNews, int* NewsEffect);
 
 int main()
 {
-	const char HOST[] = "localhost";
-	const char HOSTNAME[] = "root";
-	const char HOSTPW[] = "";
-	const char DB[] = "coindb";
-	const int PORT = 3306;
+	// DB Connection Info
+	// [0]: HOST, [1]: HOSTNAME, [2]: HOSTPW, [3]: DB, [4]: PORT
+	char DBINFO[5][READ_MAXCOUNT] = { 0, };
+
+	FILE* pFile; // db.conf
+	fopen_s(&pFile, "db.conf", "r");
+	if (pFile == NULL)
+	{
+		puts("db.conf is not exist!");
+		return 0;
+	}
+	for (int i = 0; i < 5; i++)
+	{
+		if (feof(pFile))
+		{
+			puts("Read File Error - db.conf is invalid!");
+			fclose(pFile);
+			return 0;
+		}
+		fgets(DBINFO[i], READ_MAXCOUNT, pFile);
+		for (int j = 0; j < strlen(DBINFO[i]); j++)
+		{
+			if (DBINFO[i][j] == '\n' || DBINFO[i][j] == '\r') DBINFO[i][j] = NULL;
+		}
+	}
+	fclose(pFile);
 
 	MYSQL* Connect = mysql_init(NULL);
 	MYSQL_RES* Result = NULL;
 	MYSQL_ROW Rows;
-	char Query[400] = { 0 }; // 쿼리 최대 길이: 400byte
+	char Query[QueryBufferSize] = "";
 
 	time_t now; // 현재 시간
 	struct tm timeInfo; // 시간 정보
 	srand((unsigned int)time(NULL));
 
+#pragma region Program Initalize
 	printf("CoinDB Version: %s\nmysql client version:%s\n", VERSION, mysql_get_client_info());
-	if (mysql_real_connect(Connect, HOST, HOSTNAME, HOSTPW, DB, PORT, NULL, 0)) // DB 연결 성공 
+	if (!mysql_real_connect(Connect, DBINFO[0], DBINFO[1], DBINFO[2], DBINFO[3], atoi(DBINFO[4]), NULL, 0)) // DB 연결 성공 
 	{
-		printf("DB Connection Success!\n\n");
+		printf("DB Connection Fail\n\n");
+		mysql_close(Connect);
+		return 0;
+	}
+	printf("DB Connection Success!\n\n");
 
-		sprintf_s(Query, sizeof(Query), "SELECT COUNT(*) FROM coins");
-		Result = ExcuteQuery(Connect, Query);
-		int CoinCount = 0; // 코인 개수
-		if ((Rows = mysql_fetch_row(Result)) != NULL) CoinCount = atoi(Rows[0]);
-		else { puts("DB coins테이블의 카디널리티를 가져올 수 없습니다."); mysql_close(Connect); return 0; }
+	sprintf_s(Query, QueryBufferSize, "SELECT COUNT(*) FROM coins");
+	Result = ExcuteQuery(Connect, Query);
+	int CoinCount = 0; // 코인 개수
+	if ((Rows = mysql_fetch_row(Result)) != NULL) CoinCount = atoi(Rows[0]);
+	else
+	{
+		puts("Program Initalize Error - Check your DB!");
+		mysql_close(Connect);
+		return 0;
+	}
 
-		if (CoinCount > 1000) { puts("비정상적인 카디널리티: coins테이블 또는 쿼리를 확인해주세요."); mysql_close(Connect); return 0; }
+	/* DB data => Heap Memory: 데이터, or * 데이터 버퍼 크기 */
+	bool memory_ok = true; // 메모리 할당 상태
 
-		/* DB data => Heap Memory: 카디널리티, or * 데이터 버퍼 크기 */
-		bool memory_ok = true; // 메모리 할당 상태
+	int* CoinIds; // INT * CoinCount (Immutable: Read Only)
+	char** CoinNames; // VARCHAR(30) * CoinCount (Immutable: Read Only)
+	int* CoinPrice; // INT * CoinCount
+	int* CoinDefaultPrice; // INT * CoinCount (Immutable: Read Only)
+	char** CoinNews; // VARCHAR(255) * CoinCount
+	int* CoinFluctuationRate; // INT * CoinCount (Immutable: Read Only)
+	int* CoinNewsTerm; // INT * CoinCount
+	int* CoinNewsEffect; // INT * CoinCount
+	int* CoinDelisting; // INT * CoinCount
+	int* CoinIsTrade; // INT * CoinCount (Immutable: Read Only)
 
-		char** CoinNames; // VARCHAR(30) * CoinCount (Immutable: Read Only)
-		int* CoinPrice; // INT * CoinCount
-		bool* CoinDelisted; // TINYINT(1): bool * CoinCount
-		int* CoinDelistingTerm; // INT * CoinCount
-		char** CoinNews; // VARCHAR(255) * CoinCount
-		int* CoinNewsTerm; // INT * CoinCount
-		int* CoinNewsEffect; // INT * CoinCount
-		int* CoinDefaultPrice; // INT * CoinCount (Immutable: Read Only)
-		int* CoinFluctuationRate; // INT * CoinCount (Immutable: Read Only)
-		int* CoinOrderQuantity; // INT * CoinCount
+	/* 초기화 변수 */
+	int* CoinOpeningPriceMinute; // 코인 시가 - 10분
+	int* CoinLowPriceMinute; // 코인 저가 - 10분
+	int* CoinHighPriceMinute; // 코인 고가 - 10분
+	int* CoinClosingPriceMinute; // 코인 종가 - 10분
 
-		/* 초기화 변수 */
-		int* CoinOpeningPrice; // 코인 시가	
-		int* CoinLowPrice; // 코인 저가
-		int* CoinHighPrice; // 코인 고가
-		int* CoinClosingPrice; // 코인 종가
+	int* CoinOpeningPriceHour; // 코인 시가 - 1시간
+	int* CoinLowPriceHour; // 코인 저가 - 1시간
+	int* CoinHighPriceHour; // 코인 고가 - 1시간
+	int* CoinClosingPriceHour; // 코인 종가 - 1시간
 
-		/* 메모리 할당: 코인 개수 할당 + 코인 이름 길이 할당 */
-		CoinNames = (char**)malloc(sizeof(char*) * CoinCount); // CoinNames
-		for (int record_index = 0; record_index < CoinCount; record_index++) CoinNames[record_index] = (char*)calloc(CoinNameBufferSize, sizeof(char));
-		CoinPrice = (int*)calloc(CoinCount, sizeof(int)); // CoinPrice
-		CoinDelisted = (bool*)calloc(CoinCount, sizeof(bool)); // CoinDelisted
-		CoinDelistingTerm = (int*)calloc(CoinCount, sizeof(int)); // CoinDelistingTerm
-		CoinNews = (char**)malloc(sizeof(char*) * CoinCount); // CoinNews
-		for (int record_index = 0; record_index < CoinCount; record_index++) CoinNews[record_index] = (char*)calloc(CoinNewsBufferSize, sizeof(char));
-		CoinNewsTerm = (int*)calloc(CoinCount, sizeof(int)); // CoinNewsTerm
-		CoinNewsEffect = (int*)calloc(CoinCount, sizeof(int)); // CoinNewsEffect
-		CoinDefaultPrice = (int*)calloc(CoinCount, sizeof(int)); // CoindefaultPrice
-		CoinFluctuationRate = (int*)calloc(CoinCount, sizeof(int)); // CoinFluctuationRate
-		CoinOrderQuantity = (int*)calloc(CoinCount, sizeof(int)); // CoinorderQuantity
-		CoinOpeningPrice = (int*)calloc(CoinCount, sizeof(int)); // 코인 시가
-		CoinLowPrice = (int*)calloc(CoinCount, sizeof(int)); // 코인 저가
-		CoinHighPrice = (int*)calloc(CoinCount, sizeof(int)); // 코인 고가
-		CoinClosingPrice = (int*)calloc(CoinCount, sizeof(int)); // 코인 종가
+	/* 메모리 할당: 코인 개수 할당 + 코인 이름 길이 할당 */
+	CoinIds = (int*)calloc(CoinCount, sizeof(int)); // CoinIds
+	CoinNames = (char**)malloc(sizeof(char*) * CoinCount); // CoinNames
+	for (int record_index = 0; record_index < CoinCount; record_index++) CoinNames[record_index] = (char*)calloc(CoinNameBufferSize, sizeof(char));
+	CoinPrice = (int*)calloc(CoinCount, sizeof(int)); // 코인 가격
+	CoinDefaultPrice = (int*)calloc(CoinCount, sizeof(int)); // 코인 기본가
+	CoinFluctuationRate = (int*)calloc(CoinCount, sizeof(int)); // 기본 시세 변동률
+	CoinNews = (char**)malloc(sizeof(char*) * CoinCount); // 코인뉴스
+	for (int record_index = 0; record_index < CoinCount; record_index++) CoinNews[record_index] = (char*)calloc(CoinNewsBufferSize, sizeof(char));
+	CoinNewsTerm = (int*)calloc(CoinCount, sizeof(int)); // 코인뉴스기간
+	CoinNewsEffect = (int*)calloc(CoinCount, sizeof(int)); // 코인뉴스 영향력
+	CoinDelisting = (int*)calloc(CoinCount, sizeof(int)); // 상폐기간
+	CoinIsTrade = (int*)calloc(CoinCount, sizeof(int)); // 코인 거래 가능 여부
 
-		/* 메모리 부족 확인 */
-		for (int i = 0; i < CoinCount; i++)
+	CoinOpeningPriceMinute = (int*)calloc(CoinCount, sizeof(int)); // 코인 시가
+	CoinOpeningPriceHour = (int*)calloc(CoinCount, sizeof(int)); // 코인 시가
+	CoinLowPriceMinute = (int*)calloc(CoinCount, sizeof(int)); // 코인 저가
+	CoinLowPriceHour = (int*)calloc(CoinCount, sizeof(int)); // 코인 저가
+	CoinHighPriceMinute = (int*)calloc(CoinCount, sizeof(int)); // 코인 고가
+	CoinHighPriceHour = (int*)calloc(CoinCount, sizeof(int)); // 코인 고가
+	CoinClosingPriceMinute = (int*)calloc(CoinCount, sizeof(int)); // 코인 종가
+	CoinClosingPriceHour = (int*)calloc(CoinCount, sizeof(int)); // 코인 종가
+
+	/* 메모리 부족 확인 */
+	for (int i = 0; i < CoinCount; i++)
+	{
+		if (CoinNames[i] == NULL || CoinNews[i] == NULL)
 		{
-			if (CoinNames[i] == NULL || CoinNews[i] == NULL)
+			for (int j = 0; j < i; j++)
 			{
-				for (int j = 0; j < i; j++)
-				{
-					free(CoinNames[i]);
-					free(CoinNews[i]);
-				}
-				memory_ok = false;
+				free(CoinNames[i]);
+				free(CoinNews[i]);
 			}
+			memory_ok = false;
 		}
-		if (CoinNames == NULL || CoinPrice == NULL || CoinDelisted == NULL || CoinDelistingTerm == NULL ||
-			CoinNews == NULL || CoinNewsTerm == NULL || CoinNewsEffect == NULL || CoinDefaultPrice == NULL ||
-			CoinFluctuationRate == NULL || CoinOrderQuantity == NULL || CoinOpeningPrice == NULL || CoinLowPrice == NULL ||
-			CoinHighPrice == NULL || CoinClosingPrice == NULL || memory_ok == false)
-		{
-			puts("Insufficient Memory!");
-			free(CoinNames); free(CoinPrice); free(CoinDelisted); free(CoinDelistingTerm);
-			free(CoinNews); free(CoinNewsTerm); free(CoinNewsEffect); free(CoinDefaultPrice);
-			free(CoinFluctuationRate); free(CoinOrderQuantity); free(CoinOpeningPrice); free(CoinLowPrice);
-			free(CoinHighPrice); free(CoinClosingPrice);
+	}
+	if (CoinIds == NULL || CoinNames == NULL || CoinPrice == NULL || CoinDelisting == NULL || CoinNews == NULL ||
+		CoinNewsTerm == NULL || CoinNewsEffect == NULL || CoinDefaultPrice == NULL || CoinIsTrade == NULL ||
+		CoinFluctuationRate == NULL || CoinOpeningPriceMinute == NULL || CoinLowPriceMinute == NULL ||
+		CoinHighPriceMinute == NULL || CoinClosingPriceMinute == NULL || CoinOpeningPriceHour == NULL ||
+		CoinLowPriceHour == NULL || CoinHighPriceHour == NULL || CoinClosingPriceHour == NULL || memory_ok == false)
+	{
+		free(CoinIds); free(CoinNames); free(CoinPrice); free(CoinDelisting); free(CoinNews);
+		free(CoinNewsTerm); free(CoinNewsEffect); free(CoinDefaultPrice); free(CoinIsTrade);
+		free(CoinFluctuationRate); free(CoinOpeningPriceMinute); free(CoinLowPriceMinute);
+		free(CoinHighPriceMinute); free(CoinClosingPriceMinute); free(CoinOpeningPriceHour);
+		free(CoinLowPriceHour); free(CoinHighPriceHour); free(CoinClosingPriceHour);
 
+		puts("Program Initalize Error - Insufficient (Heap) Memory!");
+		mysql_close(Connect);
+		return 0;
+	}
+	/* Character Set */
+	sprintf_s(Query, QueryBufferSize, "SET names euckr");
+	ExcuteQuery(Connect, Query);
+#pragma endregion
+
+#pragma region Load Data
+	/* 코인 데이터 불러오기
+	* [0]: id,		[1]: coin_name,	[2]: price,			[3]: default_price,	[4]: fluctuation_rate
+	* [5]: news,	[6]: news_term,	[7]: news_effect,	[8]: delisting		[9]: is_trade
+	*/
+	sprintf_s(Query, QueryBufferSize, "SELECT id, coin_name, price, default_price, fluctuation_rate, news, news_term, news_effect, delisting, is_trade FROM coins");
+	Result = ExcuteQuery(Connect, Query);
+	for (int fetch_index = 0; fetch_index < CoinCount; fetch_index++)
+	{
+		if ((Rows = mysql_fetch_row(Result)) != NULL)
+		{
+			CoinIds[fetch_index] = atoi(Rows[0]);
+			sprintf_s(CoinNames[fetch_index], CoinNameBufferSize, "%s", Rows[1]);
+			CoinPrice[fetch_index] = atoi(Rows[2]);
+			CoinDefaultPrice[fetch_index] = atoi(Rows[3]);
+			CoinFluctuationRate[fetch_index] = atoi(Rows[4]);
+			sprintf_s(CoinNews[fetch_index], CoinNewsBufferSize, "%s", Rows[5]);
+			CoinNewsTerm[fetch_index] = atoi(Rows[6]);
+			CoinNewsEffect[fetch_index] = atoi(Rows[7]);
+			CoinDelisting[fetch_index] = atoi(Rows[8]);
+			CoinIsTrade[fetch_index] = atoi(Rows[9]);
+		}
+		else
+		{
+			puts("coinCount is not matched fetch_rows");
+			puts("Load Data Error - 0");
 			mysql_close(Connect);
 			return 0;
 		}
+	}
 
-		bool IsBackup = false; // 10분마다 backup 
+	/* 프로그램 시작 기준 [시가, 종가, 최고, 최저] = 현재가 */
+	for (int coin = 0; coin < CoinCount; coin++)
+	{
+		CoinOpeningPriceMinute[coin] = CoinPrice[coin];
+		CoinOpeningPriceHour[coin] = CoinPrice[coin];
+		CoinLowPriceMinute[coin] = CoinPrice[coin];
+		CoinLowPriceHour[coin] = CoinPrice[coin];
+		CoinHighPriceMinute[coin] = CoinPrice[coin];
+		CoinHighPriceHour[coin] = CoinPrice[coin];
+		CoinClosingPriceMinute[coin] = CoinPrice[coin];
+		CoinClosingPriceHour[coin] = CoinPrice[coin];
+	}
+#pragma endregion
 
-		/* Character Set */
-		sprintf_s(Query, sizeof(Query), "SET names euckr");
-		ExcuteQuery(Connect, Query);
-
-		/* 코인 데이터 불러오기 */
-		sprintf_s(Query, sizeof(Query), "SELECT coinName, price, delisted, delistingTerm, news, newsTerm, newsEffect, defaultPrice, fluctuationRate, orderQuantity FROM coins");
-		Result = ExcuteQuery(Connect, Query);
-		for (int fetch_index = 0; fetch_index < CoinCount; fetch_index++)
+#pragma region Update Data
+	bool IsBackupMinute = false; // 10분마다 backup - 저장 기간: 1주일
+	bool IsBackupHour = false; // 1시간마다 backup - 저장 기간: 2년
+	while (true)
+	{
+		now = time(NULL);
+		localtime_s(&timeInfo, &now); // Linux: sed -i 's/localtime_s/localtime_r/g' {pwd}/coindb.c
+		if (timeInfo.tm_min % 5 == 0 && timeInfo.tm_min % 10 != 0) IsBackupMinute = false; // %5분마다 backup = false
+		if (timeInfo.tm_min % 10 == 0 && !IsBackupMinute) // 10분마다 backup = true
 		{
-			if ((Rows = mysql_fetch_row(Result)) != NULL)
-			{
-				sprintf_s(CoinNames[fetch_index], CoinNameBufferSize, "%s", Rows[0]);
-
-				if (CoinPrice[fetch_index] == 0 && atoi(Rows[2]) != 1)
-				{// 현재가 == 0 && 상폐X => 이전 종가 대신 현재가로 적용, [시가, 종가, 저가, 고가] = 현재가로 적용(history 테이블에서 데이터를 불러오지 못 할 경우)
-					CoinPrice[fetch_index] = atoi(Rows[1]);
-					CoinOpeningPrice[fetch_index] = CoinPrice[fetch_index];
-					CoinClosingPrice[fetch_index] = CoinPrice[fetch_index];
-					CoinLowPrice[fetch_index] = CoinPrice[fetch_index];
-					CoinHighPrice[fetch_index] = CoinPrice[fetch_index];
-				}
-				CoinDelisted[fetch_index] = atoi(Rows[2]);
-				CoinDelistingTerm[fetch_index] = atoi(Rows[3]);
-				sprintf_s(CoinNews[fetch_index], CoinNewsBufferSize, "%s", Rows[4]);
-				CoinNewsTerm[fetch_index] = atoi(Rows[5]);
-				CoinNewsEffect[fetch_index] = atoi(Rows[6]);
-				CoinDefaultPrice[fetch_index] = atoi(Rows[7]);
-				CoinFluctuationRate[fetch_index] = atoi(Rows[8]);
-				CoinOrderQuantity[fetch_index] = atoi(Rows[9]);
-			}
-			else puts("DB의 코인 개수를 확인해주세요");
-		}
-
-		/* 이전 가격 데이터 불러오기: coinshistory테이블의 id 역순 */
-		sprintf_s(Query, sizeof(Query), "SELECT COUNT(*) FROM coinshistory");
-		Result = ExcuteQuery(Connect, Query);
-		if (Rows = mysql_fetch_row(Result))
-		{
-			if (atoi(Rows[0]) >= CoinCount)
-			{
-				for (int fetch_index = 0; fetch_index < CoinCount; fetch_index++)
-				{
-					sprintf_s(Query, sizeof(Query), "SELECT closingPrice FROM coinshistory WHERE coinName='%s' ORDER BY id DESC LIMIT 1", CoinNames[fetch_index]);
-					Result = ExcuteQuery(Connect, Query);
-					if (Rows = mysql_fetch_row(Result)) CoinPrice[fetch_index] = atoi(Rows[0]);
-
-					/* 이전 종가 = 현재가 = 현재 시가 = 현재 종가 = 현재 저가 = 현재 고가 */
-					CoinOpeningPrice[fetch_index] = CoinPrice[fetch_index];
-					CoinClosingPrice[fetch_index] = CoinPrice[fetch_index];
-					CoinLowPrice[fetch_index] = CoinPrice[fetch_index];
-					CoinHighPrice[fetch_index] = CoinPrice[fetch_index];
-				}
-			}
-		}
-
-		while (true)
-		{
-			now = time(NULL);
-			localtime_s(&timeInfo, &now);
-			if (timeInfo.tm_min % 5 == 0 && timeInfo.tm_min % 10 != 0) IsBackup = false; // %5분마다 backup = false 
-			if (timeInfo.tm_min % 10 == 0 && !IsBackup) // 10분마다 backup = true 
-			{
-				for (int coin = 0; coin < CoinCount; coin++)
-				{
-					InsertData(Connect, Query, CoinNames[coin], CoinOpeningPrice[coin], CoinClosingPrice[coin], CoinLowPrice[coin], CoinHighPrice[coin], CoinDelisted[coin]);
-					/* 현재가 = 현재 시가 = 현재 종가 = 현재 저가 = 현재 고가 초기화 */
-					CoinOpeningPrice[coin] = CoinPrice[coin];
-					CoinClosingPrice[coin] = CoinPrice[coin];
-					CoinLowPrice[coin] = CoinPrice[coin];
-					CoinHighPrice[coin] = CoinPrice[coin];
-				}
-
-				/* 2년치 데이터 저장 */
-				sprintf_s(Query, sizeof(Query), "SELECT COUNT(*) FROM coinshistory");
-				Result = ExcuteQuery(Connect, Query);
-				if (Rows = mysql_fetch_row(Result))
-				{
-					if (atoi(Rows[0]) > 4200000)
-					{
-						printf("삭제");
-					}
-				}
-				IsBackup = true;
-			}
-
+			/* 10분 - {시가, 종가, 저가, 고가} 갱신 및 저장 */
 			for (int coin = 0; coin < CoinCount; coin++)
 			{
-				int newsEffectValue = 0; // 코인 뉴스에 따른 추가 변동폭
-				int defaultFluctuationValue = CoinFluctuationRate[coin]; // 기본 변동폭 조정
-				int priceFlucDiddle = rand() % 4 + 1; // 기본 변동폭 조정 확률
-				int priceDiddle = rand() % 100 + 1; // 시가 변동 확률
-				switch (priceFlucDiddle) // 25% 확률
+				sprintf_s(Query, QueryBufferSize, "INSERT INTO coins_history_minutely (coin_id, opening_price, closing_price, low_price, high_price, delisted) VALUES (%d, %d, %d, %d, %d, %d)", CoinIds[coin], CoinOpeningPriceMinute[coin], CoinClosingPriceMinute[coin], CoinLowPriceMinute[coin], CoinHighPriceMinute[coin], CoinDelisting[coin]);
+				ExcuteQuery(Connect, Query);
+				if (Result == NULL) { puts("Update Data Error - 0"); mysql_close(Connect); return 0; }
+				/* 현재가 = 현재 시가 = 현재 종가 = 현재 저가 = 현재 고가 초기화 */
+				CoinOpeningPriceMinute[coin] = CoinPrice[coin];
+				CoinClosingPriceMinute[coin] = CoinPrice[coin];
+				CoinLowPriceMinute[coin] = CoinPrice[coin];
+				CoinHighPriceMinute[coin] = CoinPrice[coin];
+			}
+
+			/* 10분 - 1주일치 데이터 유지 및 삭제 */
+			sprintf_s(Query, QueryBufferSize, "SELECT COUNT(*) FROM coins_history_minutely");
+			Result = ExcuteQuery(Connect, Query);
+			if (Result == NULL) { puts("Update Data Error - 1"); mysql_close(Connect); return 0; }
+			if (Rows = mysql_fetch_row(Result))
+			{
+				if (atoi(Rows[0]) > CoinCount * 6 * 24 * 2)
 				{
-				case 1:
-					defaultFluctuationValue = defaultFluctuationValue / 4; // 기본 변동률의 25%
-					break;
-				case 2:
-					defaultFluctuationValue = defaultFluctuationValue / 2; // 기본 변동률의 50%
-					break;
-				case 3:
-					defaultFluctuationValue = defaultFluctuationValue * 3 / 4;  // 기본 변동률의 75%
-					break;
-				default:  // 기본 변동률의 100%
-					break;
-				}
-				newsEffectValue = CoinNewsEffect[coin] * (CoinFluctuationRate[coin] / 5); // 추가 뉴스 변동폭 = 뉴스영향력 * (기본 변동값 * 20%)
-
-				if (priceDiddle > 65) CoinPrice[coin] += defaultFluctuationValue + newsEffectValue; // 상승률: 35%
-				else if (priceDiddle > 30) CoinPrice[coin] -= defaultFluctuationValue - newsEffectValue; // 하락률: 35%
-				// 변동 없음: 30%
-
-				if (CoinPrice[coin] < CoinLowPrice[coin]) CoinLowPrice[coin] = CoinPrice[coin]; // 저가
-				if (CoinPrice[coin] > CoinHighPrice[coin]) CoinHighPrice[coin] = CoinPrice[coin]; // 고가
-
-				// 재상장: 상폐기간 == 0 && 상장폐지 상태 == true (1회성)
-				if (CoinDelisted[coin] == 1 && CoinDelistingTerm[coin] == 0)
-				{
-					CoinPrice[coin] = CoinDefaultPrice[coin];
-					CoinDelisted[coin] = 0;
-					CoinDelistingTerm[coin] = -1;
-					CoinNewsEffect[coin] = 2; // 재상장시 상승률 보장
-					sprintf_s(CoinNews[coin], CoinNewsBufferSize, "%s 재상장!", CoinNames[coin]);
-					CoinNewsTerm[coin] = 1800; // 1시간 재상장 뉴스 지속
-					sprintf_s(Query, sizeof(Query), "UPDATE coins SET price=%d, delisted=0, delistingTerm=-1, news='%s', newsTerm=%d, newsEffect=%d WHERE coinName='%s'", CoinDefaultPrice[coin], CoinNews[coin], CoinNewsTerm[coin], CoinNewsEffect[coin], CoinNames[coin]);
-					ExcuteQuery(Connect, Query);
-					continue;
-				}
-
-				// 상장폐지: 현재가 < 1 && 상장폐지 상태 == false (1회성)
-				if (CoinPrice[coin] < 1 && CoinDelisted[coin] == 0)
-				{
-					CoinPrice[coin] = 0;
-					CoinDelisted[coin] = 1; // 상장폐지
-					CoinDelistingTerm[coin] = 1800 + rand() % 1800; // 1~2시간 상장폐지
-					CoinNewsEffect[coin] = 0;
-					sprintf_s(CoinNews[coin], CoinNewsBufferSize, "%s 상장폐지!", CoinNames[coin]);
-					CoinNewsTerm[coin] = CoinDelistingTerm[coin];
-					sprintf_s(Query, sizeof(Query), "UPDATE coins SET price=0, delisted=1, delistingTerm=%d, news='%s', newsTerm=%d, newsEffect=0 WHERE coinName='%s'", CoinDelistingTerm[coin], CoinNews[coin], CoinNewsTerm[coin], CoinNames[coin]);
-					ExcuteQuery(Connect, Query);
-					continue;
-				}
-
-				// 상장 폐지 중: 상장폐지 상태 == true
-				if (CoinDelisted[coin] == 1)
-				{
-					sprintf_s(Query, sizeof(Query), "UPDATE coins SET delistingTerm=%d, newsTerm=%d WHERE coinName='%s'", --CoinDelistingTerm[coin], --CoinNewsTerm[coin], CoinNames[coin]);
-					ExcuteQuery(Connect, Query);
-					continue;
-				}
-				if (CoinDelistingTerm[coin] < -1) CoinDelistingTerm[coin] = -1; // 상폐기간 -1 보정
-
-				// 상장중: 상장폐지 상태 == false && 코인 가격 > 0
-				if (CoinDelisted[coin] == 0 && CoinPrice[coin] > 0)
-				{
-					if (CoinNewsTerm[coin] < 1)
-					{
-						CoinNewsTerm[coin] = 900 + rand() % 2700; // 30분~2시간 뉴스 지속
-						NewCardIssue(CoinNames[coin], CoinNews[coin], &CoinNewsEffect[coin]); // 뉴스 발급
-					}
-					sprintf_s(Query, sizeof(Query), "UPDATE coins SET price=%d, news='%s', newsTerm=%d, newsEffect=%d WHERE coinName='%s'", CoinPrice[coin], CoinNews[coin], --CoinNewsTerm[coin], CoinNewsEffect[coin], CoinNames[coin]);
-					ExcuteQuery(Connect, Query);
+					sprintf_s(Query, QueryBufferSize, "DELETE FROM coins_history_minutely WHERE id NOT IN (SELECT * FROM (SELECT id FROM coins_history_minutely ORDER BY id DESC LIMIT %d) AS deltable)", CoinCount * 6 * 24 * 2);
+					printf("삭제 쿼리: %s\n시각: %d:%d\n", Query, timeInfo.tm_hour, timeInfo.tm_min);
 				}
 			}
-			Sleep(2000);
+			IsBackupMinute = true;
 		}
-		mysql_close(Connect);
+
+		if (timeInfo.tm_min > 0 && timeInfo.tm_min < 60) IsBackupHour = false; // 1~59분: backup = false
+		if (timeInfo.tm_min == 0 && !IsBackupHour) // 1시간마다 backup = true
+		{
+			/* 1시간 - {시가, 종가, 저가, 고가} 갱신 및 저장 */
+			for (int coin = 0; coin < CoinCount; coin++)
+			{
+				sprintf_s(Query, QueryBufferSize, "INSERT INTO coins_history_hourly (coin_id, opening_price, closing_price, low_price, high_price, delisted) VALUES (%d, %d, %d, %d, %d, %d)", CoinIds[coin], CoinOpeningPriceHour[coin], CoinClosingPriceHour[coin], CoinLowPriceHour[coin], CoinHighPriceHour[coin], CoinDelisting[coin]);
+				ExcuteQuery(Connect, Query);
+				if (Result == NULL) { puts("Update Data Error - 2"); mysql_close(Connect); return 0; }
+				/* 현재가 = 현재 시가 = 현재 종가 = 현재 저가 = 현재 고가 초기화 */
+				CoinOpeningPriceHour[coin] = CoinPrice[coin];
+				CoinClosingPriceHour[coin] = CoinPrice[coin];
+				CoinLowPriceHour[coin] = CoinPrice[coin];
+				CoinHighPriceHour[coin] = CoinPrice[coin];
+			}
+
+			/* 1시간 - 2년치 데이터 유지 및 삭제 */
+			sprintf_s(Query, QueryBufferSize, "SELECT COUNT(*) FROM coins_history_hourly");
+			Result = ExcuteQuery(Connect, Query);
+			if (Result == NULL) { puts("Update Data Error - 3"); mysql_close(Connect); return 0; }
+			if (Rows = mysql_fetch_row(Result))
+			{
+				if (atoi(Rows[0]) > CoinCount * 24 * 365 * 2)
+				{
+					sprintf_s(Query, QueryBufferSize, "DELETE FROM coins_history_hourly WHERE id NOT IN (SELECT * FROM (SELECT id FROM coins_history_hourly ORDER BY id DESC LIMIT %d) AS deltable)", CoinCount * 24 * 365 * 2);
+					printf("삭제 쿼리: %s\n시각: %d:%d\n", Query, timeInfo.tm_hour, timeInfo.tm_min);
+				}
+			}
+			IsBackupHour = true;
+		}
+
+		/* 가격 변동 및 상장, 뉴스 조정 */
+		for (int coin = 0; coin < CoinCount; coin++) ///////////////////////////////// 변동 알고리즘 조정 필요
+		{
+			// 거래 불가 코인
+			if (CoinIsTrade[coin] == 0) continue;
+
+			int resultFluctuation = 0; // 최종 반영 변동률
+			int priceFlucDiddle = rand() % 4 + 1; // 기본 변동폭 조정 확률
+			int priceDiddle = rand() % 100 + 1; // 시가 변동 확률
+			switch (priceFlucDiddle) // 25% 확률
+			{
+			case 1:
+				resultFluctuation = CoinFluctuationRate[coin] / 4; // 기본 변동률의 25%
+				break;
+			case 2:
+				resultFluctuation = CoinFluctuationRate[coin] / 2; // 기본 변동률의 50%
+				break;
+			case 3:
+				resultFluctuation = CoinFluctuationRate[coin] * 3 / 4;  // 기본 변동률의 75%
+				break;
+			default: // 기본 변동률의 100%
+				break;
+			}
+			resultFluctuation += CoinNewsEffect[coin] * (CoinFluctuationRate[coin] / 5); // 추가 뉴스 변동폭 = 뉴스영향력 * (기본 변동값 * 20%)
+
+			if (priceDiddle > 50) resultFluctuation = resultFluctuation; // 상승률: 35%
+			else if (priceDiddle > 50) resultFluctuation = -resultFluctuation; // 하락률: 35%
+			else resultFluctuation = 0; // 변동 없음: 30%
+			CoinPrice[coin] += resultFluctuation;
+
+			if (CoinPrice[coin] < CoinLowPriceMinute[coin]) CoinLowPriceMinute[coin] = CoinPrice[coin]; // 저가 - 10분
+			if (CoinPrice[coin] > CoinHighPriceMinute[coin]) CoinHighPriceMinute[coin] = CoinPrice[coin]; // 고가 - 10분
+			if (CoinPrice[coin] < CoinLowPriceHour[coin]) CoinLowPriceHour[coin] = CoinPrice[coin]; // 저가 - 1시간
+			if (CoinPrice[coin] > CoinHighPriceHour[coin]) CoinHighPriceHour[coin] = CoinPrice[coin]; // 고가 - 1시간
+
+			// 재상장: 상폐기간 == 1
+			if (CoinDelisting[coin] == 1)
+			{
+				CoinPrice[coin] = (CoinDefaultPrice[coin] + CoinPrice[coin]) / 2;
+				sprintf_s(CoinNews[coin], CoinNewsBufferSize, "%s 재상장!", CoinNames[coin]);
+				CoinNewsTerm[coin] = 3600 / (TickInterval / 1000); // 1시간 재상장 뉴스 지속
+				CoinNewsEffect[coin] = 2; // 재상장시 상승률 보장
+				CoinDelisting[coin] = 0;
+				sprintf_s(Query, QueryBufferSize, "UPDATE coins SET price=%d, news='%s', news_term=%d, news_effect=%d, delisting=%d WHERE id=%d", CoinPrice[coin], CoinNews[coin], CoinNewsTerm[coin], CoinNewsEffect[coin], CoinDelisting[coin], CoinIds[coin]);
+				ExcuteQuery(Connect, Query);
+				continue;
+			}
+
+			// 상장폐지: 현재가 < default_price(-99%) = default_price / 20 && 상폐기간 == 0 (상장중)
+			if (CoinPrice[coin] < CoinDefaultPrice[coin] / 100 && CoinDelisting[coin] == 0)
+			{
+				sprintf_s(CoinNews[coin], CoinNewsBufferSize, "%s 상장폐지!", CoinNames[coin]);
+				CoinNewsTerm[coin] = 0;
+				CoinNewsEffect[coin] = 0;
+				CoinDelisting[coin] = 3600 / (TickInterval / 1000) + rand() % (3600 / (TickInterval / 1000)); // 1~2시간 상장폐지
+				sprintf_s(Query, QueryBufferSize, "UPDATE coins SET news='%s', news_term=0, news_effect=0, delisting=%d WHERE id=%d", CoinNews[coin], CoinDelisting[coin], CoinIds[coin]);
+				ExcuteQuery(Connect, Query);
+				continue;
+			}
+
+			// 상장폐지 중: 상폐기간 > 1
+			if (CoinDelisting[coin] > 1)
+			{
+				if (CoinDelisting[coin] < 180 / (TickInterval / 1000))
+				{
+					sprintf_s(CoinNews[coin], CoinNewsBufferSize, "%s 재상장 소식 들려와...", CoinNames[coin]);
+				}
+				sprintf_s(Query, QueryBufferSize, "UPDATE coins SET news='%s', delisting=%d WHERE id=%d", CoinNews[coin], --CoinDelisting[coin], CoinIds[coin]);
+				ExcuteQuery(Connect, Query);
+				continue;
+			}
+
+			// 상장중: 상폐기간 == 0
+			if (CoinDelisting[coin] == 0)
+			{
+				if (CoinNewsTerm[coin] < 1)
+				{
+					CoinNewsTerm[coin] = 1800 / (TickInterval / 1000) + rand() % 7200 / (TickInterval / 1000); // 30분~2시간 뉴스 지속
+					NewsCardIssue(CoinNames[coin], CoinNews[coin], &CoinNewsEffect[coin]); // 뉴스 발급
+				}
+				sprintf_s(Query, QueryBufferSize, "UPDATE coins SET price=%d, news='%s', news_term=%d, news_effect=%d WHERE id=%d", CoinPrice[coin], CoinNews[coin], --CoinNewsTerm[coin], CoinNewsEffect[coin], CoinIds[coin]);
+				ExcuteQuery(Connect, Query);
+			}
+		}
+		Sleep(TickInterval);
 	}
-	else printf("DB Connection Fail\n\n");
+#pragma endregion
+
+	mysql_close(Connect);
 	return 0;
 }
 
-MYSQL_RES* ExcuteQuery(MYSQL* connect, char query[])
+
+MYSQL_RES* ExcuteQuery(MYSQL* connect, const char* query)
 {
 	int status;
 	status = mysql_query(connect, query);
@@ -308,7 +384,7 @@ MYSQL_RES* ExcuteQuery(MYSQL* connect, char query[])
 	if (status != 0)
 	{
 		printf("Error : %s\n", mysql_error(connect));
-		return nullptr;
+		return NULL;
 	}
 	else
 	{
@@ -316,13 +392,8 @@ MYSQL_RES* ExcuteQuery(MYSQL* connect, char query[])
 	}
 }
 
-void InsertData(MYSQL* connect, char* query, char* CoinName, int opening, int closing, int low, int high, bool delisted)
-{
-	sprintf_s(query, 400, "INSERT INTO coinshistory(coinName, historyTime, openingPrice, closingPrice, lowPrice, highPrice, delisted) VALUES('%s', NOW(), %d, %d, %d, %d, %d)", CoinName, opening, closing, low, high, (int)delisted);
-	ExcuteQuery(connect, query);
-}
-
-void NewCardIssue(char* CoinName, char* CoinNews, int* NewsEffect)
+#pragma region NewsCard
+void NewsCardIssue(char* CoinName, char* CoinNews, int* NewsEffect)
 {
 	int randomNews = rand() % 6;
 	if (strcmp(CoinName, "가자코인") == 0)
@@ -1131,3 +1202,4 @@ void NewCardIssue(char* CoinName, char* CoinNews, int* NewsEffect)
 		}
 	}
 }
+#pragma endregion
