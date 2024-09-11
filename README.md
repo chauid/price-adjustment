@@ -31,31 +31,3 @@ GAZ-AAA 코인 가격 조정 프로그램
 
 ## License
 This project is licensed under the [MIT License](LICENSE).
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

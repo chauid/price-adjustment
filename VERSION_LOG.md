@@ -1,4 +1,4 @@
-## CoinDB_Price Version List
+## price-adjustmente Version Log
 
 ### v0.8
 > C++ -> C 마이그레이션 : 메모리 사용량 4MB -> 2MB로 감소  
