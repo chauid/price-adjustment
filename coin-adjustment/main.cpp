@@ -1,4 +1,4 @@
-ï»¿#include <stdio.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
@@ -6,25 +6,25 @@
 #include <windows.h> // sed -i 's/#include <windows.h>/#include <unistd.h>/g' {pwd}/coindb.c
 #include <mysql.h> // sed -i '/s/#include <mysql.h>/#include \"/usr/include/mysql/mysql.h\"/g' {pwd}/coindb.c
 
-#define VERSION "0.8" // í˜„ì¬ ë²„ì „ v0.8
+#define VERSION "0.8" // ÇöÀç ¹öÀü v0.8
 
-#define READ_MAXCOUNT 50 // í•œ ì¤„ ìµœëŒ€ ì…ë ¥ ìˆ˜
+#define READ_MAXCOUNT 50 // ÇÑ ÁÙ ÃÖ´ë ÀÔ·Â ¼ö
 
-#define CoinNameBufferSize 30 // ì½”ì¸ ì´ë¦„ ê¸¸ì´: 30byte
-#define CoinNewsBufferSize 255 // ì½”ì¸ ë‰´ìŠ¤ ê¸¸ì´: 255byte
-#define QueryBufferSize 512 // ì¿¼ë¦¬ ê¸¸ì´
-#define TickInterval 2000 // ì—…ë°ì´íŠ¸ ëŒ€ê¸°ì‹œê°„(ms)
+#define CoinNameBufferSize 30 // ÄÚÀÎ ÀÌ¸§ ±æÀÌ: 30byte
+#define CoinNewsBufferSize 255 // ÄÚÀÎ ´º½º ±æÀÌ: 255byte
+#define QueryBufferSize 512 // Äõ¸® ±æÀÌ
+#define TickInterval 2000 // ¾÷µ¥ÀÌÆ® ´ë±â½Ã°£(ms)
 
 /**
- * @brief ì¿¼ë¦¬ ì‹¤í–‰ í•¨ìˆ˜
- * @param MYSQL* Connect ë³€ìˆ˜, char[] ì¿¼ë¦¬
- * @return mysql_store_result(Connect)ì˜ ê°’
+ * @brief Äõ¸® ½ÇÇà ÇÔ¼ö
+ * @param MYSQL* Connect º¯¼ö, char[] Äõ¸®
+ * @return mysql_store_result(Connect)ÀÇ °ª
  */
 MYSQL_RES* ExcuteQuery(MYSQL* connect, const char* query);
 
 /**
- * @brief ë‰´ìŠ¤ ì¹´ë“œ ë°œê¸‰ í•¨ìˆ˜
- * @param ì½”ì¸ID, ë³€ê²½ ëŒ€ìƒ ë‰´ìŠ¤, ë‰´ìŠ¤ ì§€ì† ì‹œê°„, ë‰´ìŠ¤ ì˜í–¥ë ¥
+ * @brief ´º½º Ä«µå ¹ß±Ş ÇÔ¼ö
+ * @param ÄÚÀÎID, º¯°æ ´ë»ó ´º½º, ´º½º Áö¼Ó ½Ã°£, ´º½º ¿µÇâ·Â
  */
 void NewsCardIssue(char* CoinName, char* CoinNews, int* NewsEffect);
 
@@ -62,13 +62,13 @@ int main()
 	MYSQL_ROW Rows;
 	char Query[QueryBufferSize] = "";
 
-	time_t now; // í˜„ì¬ ì‹œê°„
-	struct tm timeInfo; // ì‹œê°„ ì •ë³´
+	time_t now; // ÇöÀç ½Ã°£
+	struct tm timeInfo; // ½Ã°£ Á¤º¸
 	srand((unsigned int)time(NULL));
 
 #pragma region Program Initalize
 	printf("CoinDB Version: %s\nmysql client version:%s\n", VERSION, mysql_get_client_info());
-	if (!mysql_real_connect(Connect, DBINFO[0], DBINFO[1], DBINFO[2], DBINFO[3], atoi(DBINFO[4]), NULL, 0)) // DB ì—°ê²° ì„±ê³µ 
+	if (!mysql_real_connect(Connect, DBINFO[0], DBINFO[1], DBINFO[2], DBINFO[3], atoi(DBINFO[4]), NULL, 0)) // DB ¿¬°á ¼º°ø 
 	{
 		printf("DB Connection Fail\n\n");
 		mysql_close(Connect);
@@ -78,7 +78,7 @@ int main()
 
 	sprintf_s(Query, QueryBufferSize, "SELECT COUNT(*) FROM coins");
 	Result = ExcuteQuery(Connect, Query);
-	int CoinCount = 0; // ì½”ì¸ ê°œìˆ˜
+	int CoinCount = 0; // ÄÚÀÎ °³¼ö
 	if ((Rows = mysql_fetch_row(Result)) != NULL) CoinCount = atoi(Rows[0]);
 	else
 	{
@@ -87,8 +87,8 @@ int main()
 		return 0;
 	}
 
-	/* DB data => Heap Memory: ë°ì´í„°, or * ë°ì´í„° ë²„í¼ í¬ê¸° */
-	bool memory_ok = true; // ë©”ëª¨ë¦¬ í• ë‹¹ ìƒíƒœ
+	/* DB data => Heap Memory: µ¥ÀÌÅÍ, or * µ¥ÀÌÅÍ ¹öÆÛ Å©±â */
+	bool memory_ok = true; // ¸Ş¸ğ¸® ÇÒ´ç »óÅÂ
 
 	int* CoinIds; // INT * CoinCount (Immutable: Read Only)
 	char** CoinNames; // VARCHAR(30) * CoinCount (Immutable: Read Only)
@@ -101,41 +101,41 @@ int main()
 	int* CoinDelisting; // INT * CoinCount
 	int* CoinIsTrade; // INT * CoinCount (Immutable: Read Only)
 
-	/* ì´ˆê¸°í™” ë³€ìˆ˜ */
-	int* CoinOpeningPriceMinute; // ì½”ì¸ ì‹œê°€ - 10ë¶„
-	int* CoinLowPriceMinute; // ì½”ì¸ ì €ê°€ - 10ë¶„
-	int* CoinHighPriceMinute; // ì½”ì¸ ê³ ê°€ - 10ë¶„
-	int* CoinClosingPriceMinute; // ì½”ì¸ ì¢…ê°€ - 10ë¶„
+	/* ÃÊ±âÈ­ º¯¼ö */
+	int* CoinOpeningPriceMinute; // ÄÚÀÎ ½Ã°¡ - 10ºĞ
+	int* CoinLowPriceMinute; // ÄÚÀÎ Àú°¡ - 10ºĞ
+	int* CoinHighPriceMinute; // ÄÚÀÎ °í°¡ - 10ºĞ
+	int* CoinClosingPriceMinute; // ÄÚÀÎ Á¾°¡ - 10ºĞ
 
-	int* CoinOpeningPriceHour; // ì½”ì¸ ì‹œê°€ - 1ì‹œê°„
-	int* CoinLowPriceHour; // ì½”ì¸ ì €ê°€ - 1ì‹œê°„
-	int* CoinHighPriceHour; // ì½”ì¸ ê³ ê°€ - 1ì‹œê°„
-	int* CoinClosingPriceHour; // ì½”ì¸ ì¢…ê°€ - 1ì‹œê°„
+	int* CoinOpeningPriceHour; // ÄÚÀÎ ½Ã°¡ - 1½Ã°£
+	int* CoinLowPriceHour; // ÄÚÀÎ Àú°¡ - 1½Ã°£
+	int* CoinHighPriceHour; // ÄÚÀÎ °í°¡ - 1½Ã°£
+	int* CoinClosingPriceHour; // ÄÚÀÎ Á¾°¡ - 1½Ã°£
 
-	/* ë©”ëª¨ë¦¬ í• ë‹¹: ì½”ì¸ ê°œìˆ˜ í• ë‹¹ + ì½”ì¸ ì´ë¦„ ê¸¸ì´ í• ë‹¹ */
+	/* ¸Ş¸ğ¸® ÇÒ´ç: ÄÚÀÎ °³¼ö ÇÒ´ç + ÄÚÀÎ ÀÌ¸§ ±æÀÌ ÇÒ´ç */
 	CoinIds = (int*)calloc(CoinCount, sizeof(int)); // CoinIds
 	CoinNames = (char**)malloc(sizeof(char*) * CoinCount); // CoinNames
 	for (int record_index = 0; record_index < CoinCount; record_index++) CoinNames[record_index] = (char*)calloc(CoinNameBufferSize, sizeof(char));
-	CoinPrice = (int*)calloc(CoinCount, sizeof(int)); // ì½”ì¸ ê°€ê²©
-	CoinDefaultPrice = (int*)calloc(CoinCount, sizeof(int)); // ì½”ì¸ ê¸°ë³¸ê°€
-	CoinFluctuationRate = (int*)calloc(CoinCount, sizeof(int)); // ê¸°ë³¸ ì‹œì„¸ ë³€ë™ë¥ 
-	CoinNews = (char**)malloc(sizeof(char*) * CoinCount); // ì½”ì¸ë‰´ìŠ¤
+	CoinPrice = (int*)calloc(CoinCount, sizeof(int)); // ÄÚÀÎ °¡°İ
+	CoinDefaultPrice = (int*)calloc(CoinCount, sizeof(int)); // ÄÚÀÎ ±âº»°¡
+	CoinFluctuationRate = (int*)calloc(CoinCount, sizeof(int)); // ±âº» ½Ã¼¼ º¯µ¿·ü
+	CoinNews = (char**)malloc(sizeof(char*) * CoinCount); // ÄÚÀÎ´º½º
 	for (int record_index = 0; record_index < CoinCount; record_index++) CoinNews[record_index] = (char*)calloc(CoinNewsBufferSize, sizeof(char));
-	CoinNewsTerm = (int*)calloc(CoinCount, sizeof(int)); // ì½”ì¸ë‰´ìŠ¤ê¸°ê°„
-	CoinNewsEffect = (int*)calloc(CoinCount, sizeof(int)); // ì½”ì¸ë‰´ìŠ¤ ì˜í–¥ë ¥
-	CoinDelisting = (int*)calloc(CoinCount, sizeof(int)); // ìƒíê¸°ê°„
-	CoinIsTrade = (int*)calloc(CoinCount, sizeof(int)); // ì½”ì¸ ê±°ë˜ ê°€ëŠ¥ ì—¬ë¶€
+	CoinNewsTerm = (int*)calloc(CoinCount, sizeof(int)); // ÄÚÀÎ´º½º±â°£
+	CoinNewsEffect = (int*)calloc(CoinCount, sizeof(int)); // ÄÚÀÎ´º½º ¿µÇâ·Â
+	CoinDelisting = (int*)calloc(CoinCount, sizeof(int)); // »óÆó±â°£
+	CoinIsTrade = (int*)calloc(CoinCount, sizeof(int)); // ÄÚÀÎ °Å·¡ °¡´É ¿©ºÎ
 
-	CoinOpeningPriceMinute = (int*)calloc(CoinCount, sizeof(int)); // ì½”ì¸ ì‹œê°€
-	CoinOpeningPriceHour = (int*)calloc(CoinCount, sizeof(int)); // ì½”ì¸ ì‹œê°€
-	CoinLowPriceMinute = (int*)calloc(CoinCount, sizeof(int)); // ì½”ì¸ ì €ê°€
-	CoinLowPriceHour = (int*)calloc(CoinCount, sizeof(int)); // ì½”ì¸ ì €ê°€
-	CoinHighPriceMinute = (int*)calloc(CoinCount, sizeof(int)); // ì½”ì¸ ê³ ê°€
-	CoinHighPriceHour = (int*)calloc(CoinCount, sizeof(int)); // ì½”ì¸ ê³ ê°€
-	CoinClosingPriceMinute = (int*)calloc(CoinCount, sizeof(int)); // ì½”ì¸ ì¢…ê°€
-	CoinClosingPriceHour = (int*)calloc(CoinCount, sizeof(int)); // ì½”ì¸ ì¢…ê°€
+	CoinOpeningPriceMinute = (int*)calloc(CoinCount, sizeof(int)); // ÄÚÀÎ ½Ã°¡
+	CoinOpeningPriceHour = (int*)calloc(CoinCount, sizeof(int)); // ÄÚÀÎ ½Ã°¡
+	CoinLowPriceMinute = (int*)calloc(CoinCount, sizeof(int)); // ÄÚÀÎ Àú°¡
+	CoinLowPriceHour = (int*)calloc(CoinCount, sizeof(int)); // ÄÚÀÎ Àú°¡
+	CoinHighPriceMinute = (int*)calloc(CoinCount, sizeof(int)); // ÄÚÀÎ °í°¡
+	CoinHighPriceHour = (int*)calloc(CoinCount, sizeof(int)); // ÄÚÀÎ °í°¡
+	CoinClosingPriceMinute = (int*)calloc(CoinCount, sizeof(int)); // ÄÚÀÎ Á¾°¡
+	CoinClosingPriceHour = (int*)calloc(CoinCount, sizeof(int)); // ÄÚÀÎ Á¾°¡
 
-	/* ë©”ëª¨ë¦¬ ë¶€ì¡± í™•ì¸ */
+	/* ¸Ş¸ğ¸® ºÎÁ· È®ÀÎ */
 	for (int i = 0; i < CoinCount; i++)
 	{
 		if (CoinNames[i] == NULL || CoinNews[i] == NULL)
@@ -170,7 +170,7 @@ int main()
 #pragma endregion
 
 #pragma region Load Data
-	/* ì½”ì¸ ë°ì´í„° ë¶ˆëŸ¬ì˜¤ê¸°
+	/* ÄÚÀÎ µ¥ÀÌÅÍ ºÒ·¯¿À±â
 	* [0]: id,		[1]: coin_name,	[2]: price,			[3]: default_price,	[4]: fluctuation_rate
 	* [5]: news,	[6]: news_term,	[7]: news_effect,	[8]: delisting		[9]: is_trade
 	*/
@@ -200,7 +200,7 @@ int main()
 		}
 	}
 
-	/* í”„ë¡œê·¸ë¨ ì‹œì‘ ê¸°ì¤€ [ì‹œê°€, ì¢…ê°€, ìµœê³ , ìµœì €] = í˜„ì¬ê°€ */
+	/* ÇÁ·Î±×·¥ ½ÃÀÛ ±âÁØ [½Ã°¡, Á¾°¡, ÃÖ°í, ÃÖÀú] = ÇöÀç°¡ */
 	for (int coin = 0; coin < CoinCount; coin++)
 	{
 		CoinOpeningPriceMinute[coin] = CoinPrice[coin];
@@ -215,29 +215,29 @@ int main()
 #pragma endregion
 
 #pragma region Update Data
-	bool IsBackupMinute = false; // 10ë¶„ë§ˆë‹¤ backup - ì €ì¥ ê¸°ê°„: 1ì£¼ì¼
-	bool IsBackupHour = false; // 1ì‹œê°„ë§ˆë‹¤ backup - ì €ì¥ ê¸°ê°„: 2ë…„
+	bool IsBackupMinute = false; // 10ºĞ¸¶´Ù backup - ÀúÀå ±â°£: 1ÁÖÀÏ
+	bool IsBackupHour = false; // 1½Ã°£¸¶´Ù backup - ÀúÀå ±â°£: 2³â
 	while (true)
 	{
 		now = time(NULL);
 		localtime_s(&timeInfo, &now); // Linux: sed -i 's/localtime_s/localtime_r/g' {pwd}/coindb.c
-		if (timeInfo.tm_min % 5 == 0 && timeInfo.tm_min % 10 != 0) IsBackupMinute = false; // %5ë¶„ë§ˆë‹¤ backup = false
-		if (timeInfo.tm_min % 10 == 0 && !IsBackupMinute) // 10ë¶„ë§ˆë‹¤ backup = true
+		if (timeInfo.tm_min % 5 == 0 && timeInfo.tm_min % 10 != 0) IsBackupMinute = false; // %5ºĞ¸¶´Ù backup = false
+		if (timeInfo.tm_min % 10 == 0 && !IsBackupMinute) // 10ºĞ¸¶´Ù backup = true
 		{
-			/* 10ë¶„ - {ì‹œê°€, ì¢…ê°€, ì €ê°€, ê³ ê°€} ê°±ì‹  ë° ì €ì¥ */
+			/* 10ºĞ - {½Ã°¡, Á¾°¡, Àú°¡, °í°¡} °»½Å ¹× ÀúÀå */
 			for (int coin = 0; coin < CoinCount; coin++)
 			{
 				sprintf_s(Query, QueryBufferSize, "INSERT INTO coins_history_minutely (coin_id, opening_price, closing_price, low_price, high_price, delisted) VALUES (%d, %d, %d, %d, %d, %d)", CoinIds[coin], CoinOpeningPriceMinute[coin], CoinClosingPriceMinute[coin], CoinLowPriceMinute[coin], CoinHighPriceMinute[coin], CoinDelisting[coin]);
 				ExcuteQuery(Connect, Query);
 				if (Result == NULL) { puts("Update Data Error - 0"); mysql_close(Connect); return 0; }
-				/* í˜„ì¬ê°€ = í˜„ì¬ ì‹œê°€ = í˜„ì¬ ì¢…ê°€ = í˜„ì¬ ì €ê°€ = í˜„ì¬ ê³ ê°€ ì´ˆê¸°í™” */
+				/* ÇöÀç°¡ = ÇöÀç ½Ã°¡ = ÇöÀç Á¾°¡ = ÇöÀç Àú°¡ = ÇöÀç °í°¡ ÃÊ±âÈ­ */
 				CoinOpeningPriceMinute[coin] = CoinPrice[coin];
 				CoinClosingPriceMinute[coin] = CoinPrice[coin];
 				CoinLowPriceMinute[coin] = CoinPrice[coin];
 				CoinHighPriceMinute[coin] = CoinPrice[coin];
 			}
 
-			/* 10ë¶„ - 1ì£¼ì¼ì¹˜ ë°ì´í„° ìœ ì§€ ë° ì‚­ì œ */
+			/* 10ºĞ - 1ÁÖÀÏÄ¡ µ¥ÀÌÅÍ À¯Áö ¹× »èÁ¦ */
 			sprintf_s(Query, QueryBufferSize, "SELECT COUNT(*) FROM coins_history_minutely");
 			Result = ExcuteQuery(Connect, Query);
 			if (Result == NULL) { puts("Update Data Error - 1"); mysql_close(Connect); return 0; }
@@ -246,29 +246,29 @@ int main()
 				if (atoi(Rows[0]) > CoinCount * 6 * 24 * 2)
 				{
 					sprintf_s(Query, QueryBufferSize, "DELETE FROM coins_history_minutely WHERE id NOT IN (SELECT * FROM (SELECT id FROM coins_history_minutely ORDER BY id DESC LIMIT %d) AS deltable)", CoinCount * 6 * 24 * 2);
-					printf("ì‚­ì œ ì¿¼ë¦¬: %s\nì‹œê°: %d:%d\n", Query, timeInfo.tm_hour, timeInfo.tm_min);
+					printf("»èÁ¦ Äõ¸®: %s\n½Ã°¢: %d:%d\n", Query, timeInfo.tm_hour, timeInfo.tm_min);
 				}
 			}
 			IsBackupMinute = true;
 		}
 
-		if (timeInfo.tm_min > 0 && timeInfo.tm_min < 60) IsBackupHour = false; // 1~59ë¶„: backup = false
-		if (timeInfo.tm_min == 0 && !IsBackupHour) // 1ì‹œê°„ë§ˆë‹¤ backup = true
+		if (timeInfo.tm_min > 0 && timeInfo.tm_min < 60) IsBackupHour = false; // 1~59ºĞ: backup = false
+		if (timeInfo.tm_min == 0 && !IsBackupHour) // 1½Ã°£¸¶´Ù backup = true
 		{
-			/* 1ì‹œê°„ - {ì‹œê°€, ì¢…ê°€, ì €ê°€, ê³ ê°€} ê°±ì‹  ë° ì €ì¥ */
+			/* 1½Ã°£ - {½Ã°¡, Á¾°¡, Àú°¡, °í°¡} °»½Å ¹× ÀúÀå */
 			for (int coin = 0; coin < CoinCount; coin++)
 			{
 				sprintf_s(Query, QueryBufferSize, "INSERT INTO coins_history_hourly (coin_id, opening_price, closing_price, low_price, high_price, delisted) VALUES (%d, %d, %d, %d, %d, %d)", CoinIds[coin], CoinOpeningPriceHour[coin], CoinClosingPriceHour[coin], CoinLowPriceHour[coin], CoinHighPriceHour[coin], CoinDelisting[coin]);
 				ExcuteQuery(Connect, Query);
 				if (Result == NULL) { puts("Update Data Error - 2"); mysql_close(Connect); return 0; }
-				/* í˜„ì¬ê°€ = í˜„ì¬ ì‹œê°€ = í˜„ì¬ ì¢…ê°€ = í˜„ì¬ ì €ê°€ = í˜„ì¬ ê³ ê°€ ì´ˆê¸°í™” */
+				/* ÇöÀç°¡ = ÇöÀç ½Ã°¡ = ÇöÀç Á¾°¡ = ÇöÀç Àú°¡ = ÇöÀç °í°¡ ÃÊ±âÈ­ */
 				CoinOpeningPriceHour[coin] = CoinPrice[coin];
 				CoinClosingPriceHour[coin] = CoinPrice[coin];
 				CoinLowPriceHour[coin] = CoinPrice[coin];
 				CoinHighPriceHour[coin] = CoinPrice[coin];
 			}
 
-			/* 1ì‹œê°„ - 2ë…„ì¹˜ ë°ì´í„° ìœ ì§€ ë° ì‚­ì œ */
+			/* 1½Ã°£ - 2³âÄ¡ µ¥ÀÌÅÍ À¯Áö ¹× »èÁ¦ */
 			sprintf_s(Query, QueryBufferSize, "SELECT COUNT(*) FROM coins_history_hourly");
 			Result = ExcuteQuery(Connect, Query);
 			if (Result == NULL) { puts("Update Data Error - 3"); mysql_close(Connect); return 0; }
@@ -277,91 +277,91 @@ int main()
 				if (atoi(Rows[0]) > CoinCount * 24 * 365 * 2)
 				{
 					sprintf_s(Query, QueryBufferSize, "DELETE FROM coins_history_hourly WHERE id NOT IN (SELECT * FROM (SELECT id FROM coins_history_hourly ORDER BY id DESC LIMIT %d) AS deltable)", CoinCount * 24 * 365 * 2);
-					printf("ì‚­ì œ ì¿¼ë¦¬: %s\nì‹œê°: %d:%d\n", Query, timeInfo.tm_hour, timeInfo.tm_min);
+					printf("»èÁ¦ Äõ¸®: %s\n½Ã°¢: %d:%d\n", Query, timeInfo.tm_hour, timeInfo.tm_min);
 				}
 			}
 			IsBackupHour = true;
 		}
 
-		/* ê°€ê²© ë³€ë™ ë° ìƒì¥, ë‰´ìŠ¤ ì¡°ì • */
-		for (int coin = 0; coin < CoinCount; coin++) ///////////////////////////////// ë³€ë™ ì•Œê³ ë¦¬ì¦˜ ì¡°ì • í•„ìš”
+		/* °¡°İ º¯µ¿ ¹× »óÀå, ´º½º Á¶Á¤ */
+		for (int coin = 0; coin < CoinCount; coin++) ///////////////////////////////// º¯µ¿ ¾Ë°í¸®Áò Á¶Á¤ ÇÊ¿ä
 		{
-			// ê±°ë˜ ë¶ˆê°€ ì½”ì¸
+			// °Å·¡ ºÒ°¡ ÄÚÀÎ
 			if (CoinIsTrade[coin] == 0) continue;
 
-			int resultFluctuation = 0; // ìµœì¢… ë°˜ì˜ ë³€ë™ë¥ 
-			int priceFlucDiddle = rand() % 4 + 1; // ê¸°ë³¸ ë³€ë™í­ ì¡°ì • í™•ë¥ 
-			int priceDiddle = rand() % 100 + 1; // ì‹œê°€ ë³€ë™ í™•ë¥ 
-			switch (priceFlucDiddle) // 25% í™•ë¥ 
+			int resultFluctuation = 0; // ÃÖÁ¾ ¹İ¿µ º¯µ¿·ü
+			int priceFlucDiddle = rand() % 4 + 1; // ±âº» º¯µ¿Æø Á¶Á¤ È®·ü
+			int priceDiddle = rand() % 100 + 1; // ½Ã°¡ º¯µ¿ È®·ü
+			switch (priceFlucDiddle) // 25% È®·ü
 			{
 			case 1:
-				resultFluctuation = CoinFluctuationRate[coin] / 4; // ê¸°ë³¸ ë³€ë™ë¥ ì˜ 25%
+				resultFluctuation = CoinFluctuationRate[coin] / 4; // ±âº» º¯µ¿·üÀÇ 25%
 				break;
 			case 2:
-				resultFluctuation = CoinFluctuationRate[coin] / 2; // ê¸°ë³¸ ë³€ë™ë¥ ì˜ 50%
+				resultFluctuation = CoinFluctuationRate[coin] / 2; // ±âº» º¯µ¿·üÀÇ 50%
 				break;
 			case 3:
-				resultFluctuation = CoinFluctuationRate[coin] * 3 / 4;  // ê¸°ë³¸ ë³€ë™ë¥ ì˜ 75%
+				resultFluctuation = CoinFluctuationRate[coin] * 3 / 4;  // ±âº» º¯µ¿·üÀÇ 75%
 				break;
-			default: // ê¸°ë³¸ ë³€ë™ë¥ ì˜ 100%
+			default: // ±âº» º¯µ¿·üÀÇ 100%
 				break;
 			}
-			resultFluctuation += CoinNewsEffect[coin] * (CoinFluctuationRate[coin] / 5); // ì¶”ê°€ ë‰´ìŠ¤ ë³€ë™í­ = ë‰´ìŠ¤ì˜í–¥ë ¥ * (ê¸°ë³¸ ë³€ë™ê°’ * 20%)
+			resultFluctuation += CoinNewsEffect[coin] * (CoinFluctuationRate[coin] / 5); // Ãß°¡ ´º½º º¯µ¿Æø = ´º½º¿µÇâ·Â * (±âº» º¯µ¿°ª * 20%)
 
-			if (priceDiddle > 50) resultFluctuation = resultFluctuation; // ìƒìŠ¹ë¥ : 35%
-			else if (priceDiddle > 50) resultFluctuation = -resultFluctuation; // í•˜ë½ë¥ : 35%
-			else resultFluctuation = 0; // ë³€ë™ ì—†ìŒ: 30%
+			if (priceDiddle > 50) resultFluctuation = resultFluctuation; // »ó½Â·ü: 35%
+			else if (priceDiddle > 50) resultFluctuation = -resultFluctuation; // ÇÏ¶ô·ü: 35%
+			else resultFluctuation = 0; // º¯µ¿ ¾øÀ½: 30%
 			CoinPrice[coin] += resultFluctuation;
 
-			if (CoinPrice[coin] < CoinLowPriceMinute[coin]) CoinLowPriceMinute[coin] = CoinPrice[coin]; // ì €ê°€ - 10ë¶„
-			if (CoinPrice[coin] > CoinHighPriceMinute[coin]) CoinHighPriceMinute[coin] = CoinPrice[coin]; // ê³ ê°€ - 10ë¶„
-			if (CoinPrice[coin] < CoinLowPriceHour[coin]) CoinLowPriceHour[coin] = CoinPrice[coin]; // ì €ê°€ - 1ì‹œê°„
-			if (CoinPrice[coin] > CoinHighPriceHour[coin]) CoinHighPriceHour[coin] = CoinPrice[coin]; // ê³ ê°€ - 1ì‹œê°„
+			if (CoinPrice[coin] < CoinLowPriceMinute[coin]) CoinLowPriceMinute[coin] = CoinPrice[coin]; // Àú°¡ - 10ºĞ
+			if (CoinPrice[coin] > CoinHighPriceMinute[coin]) CoinHighPriceMinute[coin] = CoinPrice[coin]; // °í°¡ - 10ºĞ
+			if (CoinPrice[coin] < CoinLowPriceHour[coin]) CoinLowPriceHour[coin] = CoinPrice[coin]; // Àú°¡ - 1½Ã°£
+			if (CoinPrice[coin] > CoinHighPriceHour[coin]) CoinHighPriceHour[coin] = CoinPrice[coin]; // °í°¡ - 1½Ã°£
 
-			// ì¬ìƒì¥: ìƒíê¸°ê°„ == 1
+			// Àç»óÀå: »óÆó±â°£ == 1
 			if (CoinDelisting[coin] == 1)
 			{
 				CoinPrice[coin] = (CoinDefaultPrice[coin] + CoinPrice[coin]) / 2;
-				sprintf_s(CoinNews[coin], CoinNewsBufferSize, "%s ì¬ìƒì¥!", CoinNames[coin]);
-				CoinNewsTerm[coin] = 3600 / (TickInterval / 1000); // 1ì‹œê°„ ì¬ìƒì¥ ë‰´ìŠ¤ ì§€ì†
-				CoinNewsEffect[coin] = 2; // ì¬ìƒì¥ì‹œ ìƒìŠ¹ë¥  ë³´ì¥
+				sprintf_s(CoinNews[coin], CoinNewsBufferSize, "%s Àç»óÀå!", CoinNames[coin]);
+				CoinNewsTerm[coin] = 3600 / (TickInterval / 1000); // 1½Ã°£ Àç»óÀå ´º½º Áö¼Ó
+				CoinNewsEffect[coin] = 2; // Àç»óÀå½Ã »ó½Â·ü º¸Àå
 				CoinDelisting[coin] = 0;
 				sprintf_s(Query, QueryBufferSize, "UPDATE coins SET price=%d, news='%s', news_term=%d, news_effect=%d, delisting=%d WHERE id=%d", CoinPrice[coin], CoinNews[coin], CoinNewsTerm[coin], CoinNewsEffect[coin], CoinDelisting[coin], CoinIds[coin]);
 				ExcuteQuery(Connect, Query);
 				continue;
 			}
 
-			// ìƒì¥íì§€: í˜„ì¬ê°€ < default_price(-99%) = default_price / 20 && ìƒíê¸°ê°„ == 0 (ìƒì¥ì¤‘)
+			// »óÀåÆóÁö: ÇöÀç°¡ < default_price(-99%) = default_price / 20 && »óÆó±â°£ == 0 (»óÀåÁß)
 			if (CoinPrice[coin] < CoinDefaultPrice[coin] / 100 && CoinDelisting[coin] == 0)
 			{
-				sprintf_s(CoinNews[coin], CoinNewsBufferSize, "%s ìƒì¥íì§€!", CoinNames[coin]);
+				sprintf_s(CoinNews[coin], CoinNewsBufferSize, "%s »óÀåÆóÁö!", CoinNames[coin]);
 				CoinNewsTerm[coin] = 0;
 				CoinNewsEffect[coin] = 0;
-				CoinDelisting[coin] = 3600 / (TickInterval / 1000) + rand() % (3600 / (TickInterval / 1000)); // 1~2ì‹œê°„ ìƒì¥íì§€
+				CoinDelisting[coin] = 3600 / (TickInterval / 1000) + rand() % (3600 / (TickInterval / 1000)); // 1~2½Ã°£ »óÀåÆóÁö
 				sprintf_s(Query, QueryBufferSize, "UPDATE coins SET news='%s', news_term=0, news_effect=0, delisting=%d WHERE id=%d", CoinNews[coin], CoinDelisting[coin], CoinIds[coin]);
 				ExcuteQuery(Connect, Query);
 				continue;
 			}
 
-			// ìƒì¥íì§€ ì¤‘: ìƒíê¸°ê°„ > 1
+			// »óÀåÆóÁö Áß: »óÆó±â°£ > 1
 			if (CoinDelisting[coin] > 1)
 			{
 				if (CoinDelisting[coin] < 180 / (TickInterval / 1000))
 				{
-					sprintf_s(CoinNews[coin], CoinNewsBufferSize, "%s ì¬ìƒì¥ ì†Œì‹ ë“¤ë ¤ì™€...", CoinNames[coin]);
+					sprintf_s(CoinNews[coin], CoinNewsBufferSize, "%s Àç»óÀå ¼Ò½Ä µé·Á¿Í...", CoinNames[coin]);
 				}
 				sprintf_s(Query, QueryBufferSize, "UPDATE coins SET news='%s', delisting=%d WHERE id=%d", CoinNews[coin], --CoinDelisting[coin], CoinIds[coin]);
 				ExcuteQuery(Connect, Query);
 				continue;
 			}
 
-			// ìƒì¥ì¤‘: ìƒíê¸°ê°„ == 0
+			// »óÀåÁß: »óÆó±â°£ == 0
 			if (CoinDelisting[coin] == 0)
 			{
 				if (CoinNewsTerm[coin] < 1)
 				{
-					CoinNewsTerm[coin] = 1800 / (TickInterval / 1000) + rand() % 7200 / (TickInterval / 1000); // 30ë¶„~2ì‹œê°„ ë‰´ìŠ¤ ì§€ì†
-					NewsCardIssue(CoinNames[coin], CoinNews[coin], &CoinNewsEffect[coin]); // ë‰´ìŠ¤ ë°œê¸‰
+					CoinNewsTerm[coin] = 1800 / (TickInterval / 1000) + rand() % 7200 / (TickInterval / 1000); // 30ºĞ~2½Ã°£ ´º½º Áö¼Ó
+					NewsCardIssue(CoinNames[coin], CoinNews[coin], &CoinNewsEffect[coin]); // ´º½º ¹ß±Ş
 				}
 				sprintf_s(Query, QueryBufferSize, "UPDATE coins SET price=%d, news='%s', news_term=%d, news_effect=%d WHERE id=%d", CoinPrice[coin], CoinNews[coin], --CoinNewsTerm[coin], CoinNewsEffect[coin], CoinIds[coin]);
 				ExcuteQuery(Connect, Query);
@@ -396,267 +396,267 @@ MYSQL_RES* ExcuteQuery(MYSQL* connect, const char* query)
 void NewsCardIssue(char* CoinName, char* CoinNews, int* NewsEffect)
 {
 	int randomNews = rand() % 6;
-	if (strcmp(CoinName, "ê°€ìì½”ì¸") == 0)
+	if (strcmp(CoinName, "°¡ÀÚÄÚÀÎ") == 0)
 	{
 		switch (randomNews)
 		{
 		case 0:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "ê°€ì¦ˆì•„~~~~~~~!!!");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "°¡Áî¾Æ~~~~~~~!!!");
 			*NewsEffect = 5;
 			break;
 		case 1:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "ìœ¼ì•„ì•„ì•„~~~~~~~~~ì•…!!");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "À¸¾Æ¾Æ¾Æ~~~~~~~~~¾Ç!!");
 			*NewsEffect = -5;
 			break;
 		case 2:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "ê°€ì¦ˆì•„~~~~~~~!!!");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "°¡Áî¾Æ~~~~~~~!!!");
 			*NewsEffect = 5;
 			break;
 		case 3:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "ìœ¼ì•„ì•„ì•„~~~~~~~~~ì•…!!");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "À¸¾Æ¾Æ¾Æ~~~~~~~~~¾Ç!!");
 			*NewsEffect = -5;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ë‰´ìŠ¤ ì—†ìŒ. 2 / 3 í™•ë¥ ë¡œ ë‰´ìŠ¤
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ´º½º ¾øÀ½. 2 / 3 È®·ü·Î ´º½º
 			*NewsEffect = 0;
 			break;
 		}
 	}
-	else if (strcmp(CoinName, "ê¹ŒìŠ¤") == 0)
+	else if (strcmp(CoinName, "±î½º") == 0)
 	{
 		switch (randomNews)
 		{
 		case 0:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "ë„ì‹œê¹ŒìŠ¤ ê°€ê²© ì¸ìƒ ê³„íšì•ˆ ë°œí‘œ!");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "µµ½Ã±î½º °¡°İ ÀÎ»ó °èÈ¹¾È ¹ßÇ¥!");
 			*NewsEffect = 2;
 			break;
 		case 1:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "ì‹œë¯¼ë“¤, ê¹ŒìŠ¤ë¹„ ë„ˆë¬´ ë¹„ì‹¸ë‹¤! ì´ì— ë„ì‹œê¹ŒìŠ¤ ê°€ê²© ì¸í•˜.");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "½Ã¹Îµé, ±î½ººñ ³Ê¹« ºñ½Î´Ù! ÀÌ¿¡ µµ½Ã±î½º °¡°İ ÀÎÇÏ.");
 			*NewsEffect = -2;
 			break;
 		case 2:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "ê¹ŒìŠ¤ê³µì‚¬ì¸¡, ê¹ŒìŠ¤ë¹„ ì•ˆì •í™” ë…¸ë ¥...");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "±î½º°ø»çÃø, ±î½ººñ ¾ÈÁ¤È­ ³ë·Â...");
 			*NewsEffect = 1;
 			break;
 		case 3:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "ê¹ŒìŠ¤ê³µì‚¬ ì ì ì†Œì‹.");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "±î½º°ø»ç ÀûÀÚ ¼Ò½Ä.");
 			*NewsEffect = -1;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ë‰´ìŠ¤ ì—†ìŒ. 2 / 3 í™•ë¥ ë¡œ ë‰´ìŠ¤
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ´º½º ¾øÀ½. 2 / 3 È®·ü·Î ´º½º
 			*NewsEffect = 0;
 			break;
 		}
 	}
-	else if (strcmp(CoinName, "ë””ì¹´ë¥´ì½”") == 0)
+	else if (strcmp(CoinName, "µğÄ«¸£ÄÚ") == 0)
 	{
 		switch (randomNews)
 		{
 		case 0:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "ë¬¼ë¥˜ì„¼í„°ì˜ ë¬¼ë¥˜ ìš”ì²­ ê¸‰ì¦!");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "¹°·ù¼¾ÅÍÀÇ ¹°·ù ¿äÃ» ±ŞÁõ!");
 			*NewsEffect = 4;
 			break;
 		case 1:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "ë””ì¹´ë¥´ì½” ë°ì´í„° ì„¼í„° í™”ì¬ ë°œìƒ!");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "µğÄ«¸£ÄÚ µ¥ÀÌÅÍ ¼¾ÅÍ È­Àç ¹ß»ı!");
 			*NewsEffect = -4;
 			break;
 		case 2:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "ìƒˆë¡œìš´ ë¬¼ë¥˜ ë„¤íŠ¸ì›Œí¬ ê¸°íšì•ˆ ë°œí‘œ.");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "»õ·Î¿î ¹°·ù ³×Æ®¿öÅ© ±âÈ¹¾È ¹ßÇ¥.");
 			*NewsEffect = 2;
 			break;
 		case 3:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "ë¬¼ë¥˜ë„¤íŠ¸ì›Œí¬ ìˆ˜ìš” ì¦ê°€ ì†Œì‹.");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "¹°·ù³×Æ®¿öÅ© ¼ö¿ä Áõ°¡ ¼Ò½Ä.");
 			*NewsEffect = -2;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ë‰´ìŠ¤ ì—†ìŒ. 2 / 3 í™•ë¥ ë¡œ ë‰´ìŠ¤
-			*NewsEffect = 0; // ìƒìŠ¹ì„¸ ë³´ì¥ (ìƒìŠ¹ë¥ :50%)
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ´º½º ¾øÀ½. 2 / 3 È®·ü·Î ´º½º
+			*NewsEffect = 0; // »ó½Â¼¼ º¸Àå (»ó½Â·ü:50%)
 			break;
 		}
 	}
-	else if (strcmp(CoinName, "ëŒë‹¤í† í°") == 0)
+	else if (strcmp(CoinName, "¶÷´ÙÅäÅ«") == 0)
 	{
 		switch (randomNews)
 		{
 		case 0:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "ë™ì˜ìƒ í”Œë«í¼ì˜ ì£¼ìš” í™”íë¡œ ëŒë‹¤ í† í° ì‚¬ìš©ì„ ê¶Œì¥í•˜ëŠ” ì¶”ì„¸.");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "µ¿¿µ»ó ÇÃ·§ÆûÀÇ ÁÖ¿ä È­Æó·Î ¶÷´Ù ÅäÅ« »ç¿ëÀ» ±ÇÀåÇÏ´Â Ãß¼¼.");
 			*NewsEffect = 4;
 			break;
 		case 1:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "ëŒë‹¤ í”Œë«í¼, ë¶ˆê±´ì „í•œ ë™ì˜ìƒ ìœ í¬ë˜ë‹¤!");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "¶÷´Ù ÇÃ·§Æû, ºÒ°ÇÀüÇÑ µ¿¿µ»ó À¯Æ÷µÇ´Ù!");
 			*NewsEffect = -5;
 			break;
 		case 2:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "ëŒë‹¤ í”Œë«í¼, ë³´ì•ˆ ê°•í™” í”„ë¡œì íŠ¸ ì‹¤í–‰.");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "¶÷´Ù ÇÃ·§Æû, º¸¾È °­È­ ÇÁ·ÎÁ§Æ® ½ÇÇà.");
 			*NewsEffect = 2;
 			break;
 		case 3:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "ì´ë²ˆ ë¶„ê¸°, ë™ì˜ìƒ í”Œë«í¼ ìˆ˜ìš”ëŸ‰ ê°ì†Œ.");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "ÀÌ¹ø ºĞ±â, µ¿¿µ»ó ÇÃ·§Æû ¼ö¿ä·® °¨¼Ò.");
 			*NewsEffect = -1;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ë‰´ìŠ¤ ì—†ìŒ. 2 / 3 í™•ë¥ ë¡œ ë‰´ìŠ¤
-			*NewsEffect = 0; // ìƒìŠ¹ì„¸ ë³´ì¥ (ìƒìŠ¹ë¥ :50%)
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ´º½º ¾øÀ½. 2 / 3 È®·ü·Î ´º½º
+			*NewsEffect = 0; // »ó½Â¼¼ º¸Àå (»ó½Â·ü:50%)
 			break;
 		}
 	}
-	else if (strcmp(CoinName, "ë¦¬í¼ë¦¬ìŒ") == 0)
+	else if (strcmp(CoinName, "¸®ÆÛ¸®À½") == 0)
 	{
 		switch (randomNews)
 		{
 		case 0:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "ìƒˆë¡œìš´ ì¸ë”” ê²Œì„ì‚¬ íƒ„ìƒ! ë¦¬í¼ë¦¬ìŒ ìˆ˜ìš” ì¦ê°€!");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "»õ·Î¿î ÀÎµğ °ÔÀÓ»ç Åº»ı! ¸®ÆÛ¸®À½ ¼ö¿ä Áõ°¡!");
 			*NewsEffect = 3;
 			break;
 		case 1:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "ê²Œì„ ìˆ˜ìš” ê°ì†Œì— ë”°ë¥¸ ì¸ë”” ê²Œì„ì‚¬ ë§ˆì¼€íŒ… ë¶€ë‹´ ì¦ê°€.");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "°ÔÀÓ ¼ö¿ä °¨¼Ò¿¡ µû¸¥ ÀÎµğ °ÔÀÓ»ç ¸¶ÄÉÆÃ ºÎ´ã Áõ°¡.");
 			*NewsEffect = -1;
 			break;
 		case 2:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "ëª¨ë“  ê²Œì„ì‚¬ì˜ í™œë°œí•œ ë§ˆì¼€íŒ… ê²½ìŸ!");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "¸ğµç °ÔÀÓ»çÀÇ È°¹ßÇÑ ¸¶ÄÉÆÃ °æÀï!");
 			*NewsEffect = 3;
 			break;
 		case 3:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "ì…§ë‹¤ìš´ì œ ë¶€í™œ ì†Œì‹ì— ì¸ë”” ê²Œì„ì‚¬ë“¤ ëŒ€ê·œëª¨ ê²½ì˜ ìœ„ê¸°!!");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "¼Ë´Ù¿îÁ¦ ºÎÈ° ¼Ò½Ä¿¡ ÀÎµğ °ÔÀÓ»çµé ´ë±Ô¸ğ °æ¿µ À§±â!!");
 			*NewsEffect = -5;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ë‰´ìŠ¤ ì—†ìŒ. 2 / 3 í™•ë¥ ë¡œ ë‰´ìŠ¤
-			*NewsEffect = 0; // ìƒìŠ¹ì„¸ ë³´ì¥ (ìƒìŠ¹ë¥ :50%)
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ´º½º ¾øÀ½. 2 / 3 È®·ü·Î ´º½º
+			*NewsEffect = 0; // »ó½Â¼¼ º¸Àå (»ó½Â·ü:50%)
 			break;
 		}
 	}
-	else if (strcmp(CoinName, "ë¦¬í’€") == 0)
+	else if (strcmp(CoinName, "¸®Ç®") == 0)
 	{
 		switch (randomNews)
 		{
 		case 0:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "ë¦¬í’€ì½”ì¸, ì••ë„ì ì¸ ê±°ë˜ ì†ë„ì— ëª¨ë‘ê°€ ë†€ë¼!");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "¸®Ç®ÄÚÀÎ, ¾ĞµµÀûÀÎ °Å·¡ ¼Óµµ¿¡ ¸ğµÎ°¡ ³î¶ó!");
 			*NewsEffect = 4;
 			break;
 		case 1:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "ë¦¬í’€ ì½”ì¸ ì†¡ê¸ˆ íƒ€ì´ë° ì‹¤íŒ¨, ì´ìš©ìì˜ ë¶ˆë§Œ í† ë¡œ...");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "¸®Ç® ÄÚÀÎ ¼Û±İ Å¸ÀÌ¹Ö ½ÇÆĞ, ÀÌ¿ëÀÚÀÇ ºÒ¸¸ Åä·Î...");
 			*NewsEffect = -3;
 			break;
 		case 2:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "ë¸”ë¡ì²´ì¸ ë„¤íŠ¸ì›Œí¬ì—ì„œ â€œë¦¬í’€ì½”ì¸â€, ì„±ì¥ ê°€ëŠ¥ì„± í™”í TOP10ì— ì„ ì •.");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "ºí·ÏÃ¼ÀÎ ³×Æ®¿öÅ©¿¡¼­ ¡°¸®Ç®ÄÚÀÎ¡±, ¼ºÀå °¡´É¼º È­Æó TOP10¿¡ ¼±Á¤.");
 			*NewsEffect = 3;
 			break;
 		case 3:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "ë¦¬í’€ì½”ì¸, ê°‘ì‘ìŠ¤ëŸ° í•˜ë½ì„¸ ê´€ì¸¡.");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "¸®Ç®ÄÚÀÎ, °©ÀÛ½º·± ÇÏ¶ô¼¼ °üÃø.");
 			*NewsEffect = -4;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ë‰´ìŠ¤ ì—†ìŒ. 2 / 3 í™•ë¥ ë¡œ ë‰´ìŠ¤
-			*NewsEffect = 0; // ìƒìŠ¹ì„¸ ë³´ì¥ (ìƒìŠ¹ë¥ :50%)
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ´º½º ¾øÀ½. 2 / 3 È®·ü·Î ´º½º
+			*NewsEffect = 0; // »ó½Â¼¼ º¸Àå (»ó½Â·ü:50%)
 			break;
 		}
 	}
-	else if (strcmp(CoinName, "ë¹„íˆ¬ì½”ì¸") == 0)
+	else if (strcmp(CoinName, "ºñÅõÄÚÀÎ") == 0)
 	{
 		switch (randomNews)
 		{
 		case 0:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "ì•”í˜¸í™”í ê±°ë˜ ì¤‘ ê°€ì¥ ì•ˆì „í•œ ì•”í˜¸í™”íì— â€œë¹„íˆ¬ì½”ì¸â€ ì„ ì •.");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "¾ÏÈ£È­Æó °Å·¡ Áß °¡Àå ¾ÈÀüÇÑ ¾ÏÈ£È­Æó¿¡ ¡°ºñÅõÄÚÀÎ¡± ¼±Á¤.");
 			*NewsEffect = 2;
 			break;
 		case 1:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "ì•”í˜¸í™”í ê±°ë˜ ê·œì œ, í™”í ê°€ê²© í•˜ë½ ìš°ë ¤.");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "¾ÏÈ£È­Æó °Å·¡ ±ÔÁ¦, È­Æó °¡°İ ÇÏ¶ô ¿ì·Á.");
 			*NewsEffect = -1;
 			break;
 		case 2:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "ë¹„íˆ¬ì½”ì¸ ëì—†ëŠ” ìƒìŠ¹ì„¸, â€œê°€ìƒí™”íëŠ” ë‹¤ ìƒì–´ë„ ë˜ëŠ” ì‚¬ëŒë§Œ íˆ¬ìí•´ì•¼.â€");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "ºñÅõÄÚÀÎ ³¡¾ø´Â »ó½Â¼¼, ¡°°¡»óÈ­Æó´Â ´Ù ÀÒ¾îµµ µÇ´Â »ç¶÷¸¸ ÅõÀÚÇØ¾ß.¡±");
 			*NewsEffect = 4;
 			break;
 		case 3:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "ë¹„íˆ¬ì½”ì¸ ë¶•ê´´ ì†Œì‹ ë“¤ë ¤ì™€...");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "ºñÅõÄÚÀÎ ºØ±« ¼Ò½Ä µé·Á¿Í...");
 			*NewsEffect = -5;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ë‰´ìŠ¤ ì—†ìŒ. 2 / 3 í™•ë¥ ë¡œ ë‰´ìŠ¤
-			*NewsEffect = 0; // ìƒìŠ¹ì„¸ ë³´ì¥ (ìƒìŠ¹ë¥ :50%)
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ´º½º ¾øÀ½. 2 / 3 È®·ü·Î ´º½º
+			*NewsEffect = 0; // »ó½Â¼¼ º¸Àå (»ó½Â·ü:50%)
 			break;
 		}
 	}
-	else if (strcmp(CoinName, "ìƒˆëŸ¼") == 0)
+	else if (strcmp(CoinName, "»õ·³") == 0)
 	{
 		switch (randomNews)
 		{
 		case 0:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "FTZ ì•”í˜¸í™”í ê±°ë˜ì†Œ ì´ìš©ê° ëŠ˜ì–´...");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "FTZ ¾ÏÈ£È­Æó °Å·¡¼Ò ÀÌ¿ë°´ ´Ã¾î...");
 			*NewsEffect = 3;
 			break;
 		case 1:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "FTZ, â€œê³ ê° ìê¸ˆ ê´€ë¦¬ í—ˆìˆ í•˜ë‹¤.â€ íˆ¬ììë“¤ ëˆˆë¬¼...");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "FTZ, ¡°°í°´ ÀÚ±İ °ü¸® Çã¼úÇÏ´Ù.¡± ÅõÀÚÀÚµé ´«¹°...");
 			*NewsEffect = -3;
 			break;
 		case 2:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "ì„¸ê³„ 4ìœ„ê¶Œ ì•”í˜¸í™”í˜ ê±°ë˜ì†Œì— FTZ ë“±ê·¹.");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "¼¼°è 4À§±Ç ¾ÏÈ£È­Æä °Å·¡¼Ò¿¡ FTZ µî±Ø.");
 			*NewsEffect = 4;
 			break;
 		case 3:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "FTZ íŒŒì‚° ìœ„ê¸°! ê°€ìƒí™”í˜ ëª°ë½ì˜ ì‹œì‘?");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "FTZ ÆÄ»ê À§±â! °¡»óÈ­Æä ¸ô¶ôÀÇ ½ÃÀÛ?");
 			*NewsEffect = -4;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ë‰´ìŠ¤ ì—†ìŒ. 2 / 3 í™•ë¥ ë¡œ ë‰´ìŠ¤
-			*NewsEffect = 0; // ìƒìŠ¹ì„¸ ë³´ì¥ (ìƒìŠ¹ë¥ :50%)
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ´º½º ¾øÀ½. 2 / 3 È®·ü·Î ´º½º
+			*NewsEffect = 0; // »ó½Â¼¼ º¸Àå (»ó½Â·ü:50%)
 			break;
 		}
 	}
-	else if (strcmp(CoinName, "ì„œë¸Œí”„ë ˆì„") == 0)
+	else if (strcmp(CoinName, "¼­ºêÇÁ·¹ÀÓ") == 0)
 	{
 		switch (randomNews)
 		{
 		case 0:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "ì„œë¸Œí”„ë ˆì„, ë¸”ë¡ì²´ì¸ ë©”ì‹ ì € ì¤‘ ë³´ì•ˆì„±ì´ ë§¤ìš° ë›°ì–´ë‚˜...");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "¼­ºêÇÁ·¹ÀÓ, ºí·ÏÃ¼ÀÎ ¸Ş½ÅÀú Áß º¸¾È¼ºÀÌ ¸Å¿ì ¶Ù¾î³ª...");
 			*NewsEffect = 3;
 			break;
 		case 1:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "ì„œë¸Œí”„ë ˆì„, ê°‘ì‘ìŠ¤ëŸ¬ìš´ ì„œë²„ ë‹¤ìš´! í˜„ì¬ ì›ì¸ íŒŒì•… ì¤‘.");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "¼­ºêÇÁ·¹ÀÓ, °©ÀÛ½º·¯¿î ¼­¹ö ´Ù¿î! ÇöÀç ¿øÀÎ ÆÄ¾Ç Áß.");
 			*NewsEffect = -4;
 			break;
 		case 2:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "ì„œë¸Œí”„ë ˆì„ì˜ ë…ìì ì¸ ë¸”ë™í™€ ë¼ìš°íŒ… ì•Œê³ ë¦¬ì¦˜ ê°œë°œ. â€œí•„ìš”í•œ ë©”ì‹œì§€ë§Œ ì‹ë³„ ê°€ëŠ¥í•˜ë‹¤. ì•„ì§ì€ ì¡°ê¸ˆ ë” ì§€ì¼œë´ì•¼...â€");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "¼­ºêÇÁ·¹ÀÓÀÇ µ¶ÀÚÀûÀÎ ºí·¢È¦ ¶ó¿ìÆÃ ¾Ë°í¸®Áò °³¹ß. ¡°ÇÊ¿äÇÑ ¸Ş½ÃÁö¸¸ ½Äº° °¡´ÉÇÏ´Ù. ¾ÆÁ÷Àº Á¶±İ ´õ ÁöÄÑºÁ¾ß...¡±");
 			*NewsEffect = 4;
 			break;
 		case 3:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "ì‚¬ìš©ìê°€ ë³´ë‚¸ ë©”ì‹œì§€ë¥¼ ì•…ì˜ì ì¸ ë©”ì‹œì§€ë¡œ ì¸ì‹í•´, ë©”ì‹œì§€ ì „ì†¡ ì˜¤ë¥˜ í˜„ìƒ ë°œìƒ! ì´ì— ì„œë¸Œí”„ë ˆì„ì€ â€œì—†ì–´ì§„ íŒ¨í‚·ì€ ë³µêµ¬ ë¶ˆê°€ëŠ¥í•˜ë‹¤.â€");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "»ç¿ëÀÚ°¡ º¸³½ ¸Ş½ÃÁö¸¦ ¾ÇÀÇÀûÀÎ ¸Ş½ÃÁö·Î ÀÎ½ÄÇØ, ¸Ş½ÃÁö Àü¼Û ¿À·ù Çö»ó ¹ß»ı! ÀÌ¿¡ ¼­ºêÇÁ·¹ÀÓÀº ¡°¾ø¾îÁø ÆĞÅ¶Àº º¹±¸ ºÒ°¡´ÉÇÏ´Ù.¡±");
 			*NewsEffect = -3;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ë‰´ìŠ¤ ì—†ìŒ. 2 / 3 í™•ë¥ ë¡œ ë‰´ìŠ¤
-			*NewsEffect = 0; // ìƒìŠ¹ì„¸ ë³´ì¥ (ìƒìŠ¹ë¥ :50%)
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ´º½º ¾øÀ½. 2 / 3 È®·ü·Î ´º½º
+			*NewsEffect = 0; // »ó½Â¼¼ º¸Àå (»ó½Â·ü:50%)
 			break;
 		}
 	}
-	else if (strcmp(CoinName, "ì„¼ë“œë°•ìŠ¤") == 0)
+	else if (strcmp(CoinName, "¼¾µå¹Ú½º") == 0)
 	{
 		switch (randomNews)
 		{
 		case 0:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "ë¸”ë¡ì²´ì¸ ê²Œì„ ìœ í–‰, ì„¼ë“œë°•ìŠ¤ ì½”ì¸ ì‚¬ìš©ëŸ‰ ê¸‰ì¦!");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "ºí·ÏÃ¼ÀÎ °ÔÀÓ À¯Çà, ¼¾µå¹Ú½º ÄÚÀÎ »ç¿ë·® ±ŞÁõ!");
 			*NewsEffect = 3;
 			break;
 		case 1:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "ì„¼ë“œë°•ìŠ¤ 51%% ê³µê²©ìœ¼ë¡œ ì´ì¤‘ì§€ë¶ˆ í”¼í•´ ë°œìƒ! ì•Œê³ ë³´ë‹ˆ ìì‹ ì´ ë§Œë“  ê²Œì„ì´ ì•ˆ íŒ”ë¦° ìœ ì €ë“¤ì˜ ë¶„ë…¸.");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "¼¾µå¹Ú½º 51%% °ø°İÀ¸·Î ÀÌÁßÁöºÒ ÇÇÇØ ¹ß»ı! ¾Ë°íº¸´Ï ÀÚ½ÅÀÌ ¸¸µç °ÔÀÓÀÌ ¾È ÆÈ¸° À¯ÀúµéÀÇ ºĞ³ë.");
 			*NewsEffect = -4;
 			break;
 		case 2:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "í­ìŠ¤ì—ë”§ ì´ìš©ì ëŠ˜ì–´, ì„¼ë“œë°•ìŠ¤ ì½”ì¸ ê±°ë˜ëŸ‰ ì¦ê°€ ì „ë§.");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "Æø½º¿¡µ÷ ÀÌ¿ëÀÚ ´Ã¾î, ¼¾µå¹Ú½º ÄÚÀÎ °Å·¡·® Áõ°¡ Àü¸Á.");
 			*NewsEffect = 3;
 			break;
 		case 3:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "ëª¨ë˜ ìƒì ì•ˆì— ëª¨ë˜ê°€ ëª¨ë‘ ê³ ê°ˆë‚˜ëŠ” ì‚¬íƒœ ë°œìƒ! ì•„ì´ë“¤, ë” ì´ìƒ ëª¨ë˜ì„± ëª» ë§Œë“¤ì–´ ì˜¤ì—´... ");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "¸ğ·¡ »óÀÚ ¾È¿¡ ¸ğ·¡°¡ ¸ğµÎ °í°¥³ª´Â »çÅÂ ¹ß»ı! ¾ÆÀÌµé, ´õ ÀÌ»ó ¸ğ·¡¼º ¸ø ¸¸µé¾î ¿À¿­... ");
 			*NewsEffect = -2;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ë‰´ìŠ¤ ì—†ìŒ. 2 / 3 í™•ë¥ ë¡œ ë‰´ìŠ¤
-			*NewsEffect = 0; // ìƒìŠ¹ì„¸ ë³´ì¥ (ìƒìŠ¹ë¥ :50%) 
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ´º½º ¾øÀ½. 2 / 3 È®·ü·Î ´º½º
+			*NewsEffect = 0; // »ó½Â¼¼ º¸Àå (»ó½Â·ü:50%) 
 			break;
 		}
 	}
-	else if (strcmp(CoinName, "ì†”ë¦¬ë‚˜") == 0)
+	else if (strcmp(CoinName, "¼Ö¸®³ª") == 0)
 	{
 		switch (randomNews)
 		{
@@ -677,12 +677,12 @@ void NewsCardIssue(char* CoinName, char* CoinNews, int* NewsEffect)
 			*NewsEffect = 0;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ë‰´ìŠ¤ ì—†ìŒ. 2 / 3 í™•ë¥ ë¡œ ë‰´ìŠ¤
-			*NewsEffect = 0; // ìƒìŠ¹ì„¸ ë³´ì¥ (ìƒìŠ¹ë¥ :50%)
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ´º½º ¾øÀ½. 2 / 3 È®·ü·Î ´º½º
+			*NewsEffect = 0; // »ó½Â¼¼ º¸Àå (»ó½Â·ü:50%)
 			break;
 		}
 	}
-	else if (strcmp(CoinName, "ìŠ¤í‹¤") == 0)
+	else if (strcmp(CoinName, "½ºÆº") == 0)
 	{
 		switch (randomNews)
 		{
@@ -703,12 +703,12 @@ void NewsCardIssue(char* CoinName, char* CoinNews, int* NewsEffect)
 			*NewsEffect = 0;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ë‰´ìŠ¤ ì—†ìŒ. 2 / 3 í™•ë¥ ë¡œ ë‰´ìŠ¤
-			*NewsEffect = 0; // ìƒìŠ¹ì„¸ ë³´ì¥ (ìƒìŠ¹ë¥ :50%)
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ´º½º ¾øÀ½. 2 / 3 È®·ü·Î ´º½º
+			*NewsEffect = 0; // »ó½Â¼¼ º¸Àå (»ó½Â·ü:50%)
 			break;
 		}
 	}
-	else if (strcmp(CoinName, "ìŠ¤í‹¤ë‹¬ëŸ¬") == 0)
+	else if (strcmp(CoinName, "½ºÆº´Ş·¯") == 0)
 	{
 		switch (randomNews)
 		{
@@ -729,64 +729,64 @@ void NewsCardIssue(char* CoinName, char* CoinNews, int* NewsEffect)
 			*NewsEffect = 0;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ë‰´ìŠ¤ ì—†ìŒ. 2 / 3 í™•ë¥ ë¡œ ë‰´ìŠ¤
-			*NewsEffect = 0; // ìƒìŠ¹ì„¸ ë³´ì¥ (ìƒìŠ¹ë¥ :50%)
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ´º½º ¾øÀ½. 2 / 3 È®·ü·Î ´º½º
+			*NewsEffect = 0; // »ó½Â¼¼ º¸Àå (»ó½Â·ü:50%)
 			break;
 		}
 	}
-	else if (strcmp(CoinName, "ìŠ¹í™˜í† í°") == 0)
+	else if (strcmp(CoinName, "½ÂÈ¯ÅäÅ«") == 0)
 	{
 		switch (randomNews)
 		{
 		case 0:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "â€œì„œìŠ¹í™˜ì‹ í¬ë¥´í…Œâ€ ì—°ë¹„ 30.7KM ë‹¬ì„±, í•˜ì´ë¸Œë¦¬ë“œ ì°¨ì£¼ë„ ëª¨ë‘ ë†€ë¼!");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "¡°¼­½ÂÈ¯½Ä Æ÷¸£Å×¡± ¿¬ºñ 30.7KM ´Ş¼º, ÇÏÀÌºê¸®µå Â÷ÁÖµµ ¸ğµÎ ³î¶ó!");
 			*NewsEffect = 4;
 			break;
 		case 1:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "ì„œëª¨ì”¨, ìŒì£¼ ë‹¨ì†ì¤‘ ê¼¬ê¹”ì½˜ ì³ â€œì¶©ê²©â€");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "¼­¸ğ¾¾, À½ÁÖ ´Ü¼ÓÁß ²¿±òÄÜ ÃÄ ¡°Ãæ°İ¡±");
 			*NewsEffect = -5;
 			break;
 		case 2:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "ì¼ë³¸ì´ ì ˆë§í•˜ê³  ì„¸ê³„ê°€ ì—´ê´‘í•˜ë©° ì™¸ì‹ ì´ ì£¼ëª©í•˜ëŠ” â€œì„œìŠ¹í™˜ì‹ í¬ë¥´í…Œâ€");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "ÀÏº»ÀÌ Àı¸ÁÇÏ°í ¼¼°è°¡ ¿­±¤ÇÏ¸ç ¿Ü½ÅÀÌ ÁÖ¸ñÇÏ´Â ¡°¼­½ÂÈ¯½Ä Æ÷¸£Å×¡±");
 			*NewsEffect = 4;
 			break;
 		case 3:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "ì„œëª¨ì”¨, í¬ë¥´í…Œ ì‹œìŠ¹í•´ ë¸Œëœë“œ ê°€ì¹˜ í•˜ë½!");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "¼­¸ğ¾¾, Æ÷¸£Å× ½Ã½ÂÇØ ºê·£µå °¡Ä¡ ÇÏ¶ô!");
 			*NewsEffect = -3;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ë‰´ìŠ¤ ì—†ìŒ. 2 / 3 í™•ë¥ ë¡œ ë‰´ìŠ¤
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ´º½º ¾øÀ½. 2 / 3 È®·ü·Î ´º½º
 			*NewsEffect = 0;
 			break;
 		}
 	}
-	else if (strcmp(CoinName, "ì‹œë°”ì½”ì¸") == 0)
+	else if (strcmp(CoinName, "½Ã¹ÙÄÚÀÎ") == 0)
 	{
 		switch (randomNews)
 		{
 		case 0:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "ì‹œë°”ì½”ì¸, ê¸ˆì„±ê°ˆ ë•Œ ì‚¬ìš©í•  í•„ìˆ˜ ì½”ì¸ìœ¼ë¡œ ì„ ì–¸!");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "½Ã¹ÙÄÚÀÎ, ±İ¼º°¥ ¶§ »ç¿ëÇÒ ÇÊ¼ö ÄÚÀÎÀ¸·Î ¼±¾ğ!");
 			*NewsEffect = 5;
 			break;
 		case 1:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "ì¼ë¡  ë¨¸ìŠ¼í, ì „ë¼ë„ ì˜ê´‘ ì¶œì‹ ìœ¼ë¡œ ë°í˜€ì ¸... ì¶©ê²©!");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "ÀÏ·Ğ ¸Óš¿Èå, Àü¶óµµ ¿µ±¤ Ãâ½ÅÀ¸·Î ¹àÇôÁ®... Ãæ°İ!");
 			*NewsEffect = -5;
 			break;
 		case 2:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "ì¼ë¡  ë¨¸ìŠ¼í, â€œê¸ˆì„± ê°ˆë„ë‹ˆê¹Œ~â€ ì„ ì–¸.");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "ÀÏ·Ğ ¸Óš¿Èå, ¡°±İ¼º °¥²ô´Ï±î~¡± ¼±¾ğ.");
 			*NewsEffect = 4;
 			break;
 		case 3:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "ìŠ¤í˜ì´ìŠ¤ì—ì“°, ë¡œì¼“ ì¶”ë½ ì†Œì‹.");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "½ºÆäÀÌ½º¿¡¾², ·ÎÄÏ Ãß¶ô ¼Ò½Ä.");
 			*NewsEffect = -4;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ë‰´ìŠ¤ ì—†ìŒ. 2 / 3 í™•ë¥ ë¡œ ë‰´ìŠ¤
-			*NewsEffect = 0; // ìƒìŠ¹ì„¸ ë³´ì¥ (ìƒìŠ¹ë¥ :50%)
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ´º½º ¾øÀ½. 2 / 3 È®·ü·Î ´º½º
+			*NewsEffect = 0; // »ó½Â¼¼ º¸Àå (»ó½Â·ü:50%)
 			break;
 		}
 	}
-	else if (strcmp(CoinName, "ì¸ëµ") == 0)
+	else if (strcmp(CoinName, "½æ¶ò") == 0)
 	{
 		switch (randomNews)
 		{
@@ -807,12 +807,12 @@ void NewsCardIssue(char* CoinName, char* CoinNews, int* NewsEffect)
 			*NewsEffect = 0;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ë‰´ìŠ¤ ì—†ìŒ. 2 / 3 í™•ë¥ ë¡œ ë‰´ìŠ¤
-			*NewsEffect = 0; // ìƒìŠ¹ì„¸ ë³´ì¥ (ìƒìŠ¹ë¥ :50%)
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ´º½º ¾øÀ½. 2 / 3 È®·ü·Î ´º½º
+			*NewsEffect = 0; // »ó½Â¼¼ º¸Àå (»ó½Â·ü:50%)
 			break;
 		}
 	}
-	else if (strcmp(CoinName, "ì•„ë¥´ê³³") == 0)
+	else if (strcmp(CoinName, "¾Æ¸£°÷") == 0)
 	{
 		switch (randomNews)
 		{
@@ -833,12 +833,12 @@ void NewsCardIssue(char* CoinName, char* CoinNews, int* NewsEffect)
 			*NewsEffect = 0;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ë‰´ìŠ¤ ì—†ìŒ. 2 / 3 í™•ë¥ ë¡œ ë‰´ìŠ¤
-			*NewsEffect = 0; // ìƒìŠ¹ì„¸ ë³´ì¥ (ìƒìŠ¹ë¥ :50%)
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ´º½º ¾øÀ½. 2 / 3 È®·ü·Î ´º½º
+			*NewsEffect = 0; // »ó½Â¼¼ º¸Àå (»ó½Â·ü:50%)
 			break;
 		}
 	}
-	else if (strcmp(CoinName, "ì•„ì´ì¿ ") == 0)
+	else if (strcmp(CoinName, "¾ÆÀÌÄí") == 0)
 	{
 		switch (randomNews)
 		{
@@ -859,12 +859,12 @@ void NewsCardIssue(char* CoinName, char* CoinNews, int* NewsEffect)
 			*NewsEffect = 0;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ë‰´ìŠ¤ ì—†ìŒ. 2 / 3 í™•ë¥ ë¡œ ë‰´ìŠ¤
-			*NewsEffect = 0; // ìƒìŠ¹ì„¸ ë³´ì¥ (ìƒìŠ¹ë¥ :50%)
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ´º½º ¾øÀ½. 2 / 3 È®·ü·Î ´º½º
+			*NewsEffect = 0; // »ó½Â¼¼ º¸Àå (»ó½Â·ü:50%)
 			break;
 		}
 	}
-	else if (strcmp(CoinName, "ì•„í™”í† í°") == 0)
+	else if (strcmp(CoinName, "¾ÆÈ­ÅäÅ«") == 0)
 	{
 		switch (randomNews)
 		{
@@ -885,38 +885,38 @@ void NewsCardIssue(char* CoinName, char* CoinNews, int* NewsEffect)
 			*NewsEffect = 0;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ë‰´ìŠ¤ ì—†ìŒ. 2 / 3 í™•ë¥ ë¡œ ë‰´ìŠ¤
-			*NewsEffect = 0; // ìƒìŠ¹ì„¸ ë³´ì¥ (ìƒìŠ¹ë¥ :50%)
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ´º½º ¾øÀ½. 2 / 3 È®·ü·Î ´º½º
+			*NewsEffect = 0; // »ó½Â¼¼ º¸Àå (»ó½Â·ü:50%)
 			break;
 		}
 	}
-	else if (strcmp(CoinName, "ì•±í† ìˆ˜") == 0)
+	else if (strcmp(CoinName, "¾ÛÅä¼ö") == 0)
 	{
 		switch (randomNews)
 		{
 		case 0:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "ì•±í† ìˆ˜, ì‚¼ëŒœìˆ˜ íŒë§¤ëŸ‰ ëŒíŒŒ!");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "¾ÛÅä¼ö, »ï´ô¼ö ÆÇ¸Å·® µ¹ÆÄ!");
 			*NewsEffect = 3;
 			break;
 		case 1:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "ì•±í† ìˆ˜ì—ì„œ ìœ í•´ë¬¼ì§ˆ ê²€ì¶œ! ì‚¬ëŒë“¤ì˜ ì•±í† ìˆ˜ ê±°ë¶€ ë°˜ì‘ ì¦ê°€.");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "¾ÛÅä¼ö¿¡¼­ À¯ÇØ¹°Áú °ËÃâ! »ç¶÷µéÀÇ ¾ÛÅä¼ö °ÅºÎ ¹İÀÀ Áõ°¡.");
 			*NewsEffect = -4;
 			break;
 		case 2:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "ì˜¤ëŠ˜ì˜ ë¬¼ê±´ê°• ì†Œì‹: â€œì•±í† ìˆ˜, ìµœê³ ì˜ ì‹ìˆ˜ë‹¤.â€");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "¿À´ÃÀÇ ¹°°Ç°­ ¼Ò½Ä: ¡°¾ÛÅä¼ö, ÃÖ°íÀÇ ½Ä¼ö´Ù.¡±");
 			*NewsEffect = 3;
 			break;
 		case 3:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "ë¬¼ ì‹œì¥ ê²½ìŸ ì¦ê°€ë¡œ ì•±í† ìˆ˜ì˜ ì…ì§€ í”ë“¤ë ¤-...");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "¹° ½ÃÀå °æÀï Áõ°¡·Î ¾ÛÅä¼öÀÇ ÀÔÁö Èçµé·Á-...");
 			*NewsEffect = -2;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ë‰´ìŠ¤ ì—†ìŒ. 2 / 3 í™•ë¥ ë¡œ ë‰´ìŠ¤
-			*NewsEffect = 0; // ìƒìŠ¹ì„¸ ë³´ì¥ (ìƒìŠ¹ë¥ :50%)
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ´º½º ¾øÀ½. 2 / 3 È®·ü·Î ´º½º
+			*NewsEffect = 0; // »ó½Â¼¼ º¸Àå (»ó½Â·ü:50%)
 			break;
 		}
 	}
-	else if (strcmp(CoinName, "ì—ì´ë”") == 0)
+	else if (strcmp(CoinName, "¿¡ÀÌ´õ") == 0)
 	{
 		switch (randomNews)
 		{
@@ -937,12 +937,12 @@ void NewsCardIssue(char* CoinName, char* CoinNews, int* NewsEffect)
 			*NewsEffect = 0;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ë‰´ìŠ¤ ì—†ìŒ. 2 / 3 í™•ë¥ ë¡œ ë‰´ìŠ¤
-			*NewsEffect = 0; // ìƒìŠ¹ì„¸ ë³´ì¥ (ìƒìŠ¹ë¥ :50%)
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ´º½º ¾øÀ½. 2 / 3 È®·ü·Î ´º½º
+			*NewsEffect = 0; // »ó½Â¼¼ º¸Àå (»ó½Â·ü:50%)
 			break;
 		}
 	}
-	else if (strcmp(CoinName, "ì—‘ìŠ¤ì¸í”¼ë‹ˆí‹°") == 0)
+	else if (strcmp(CoinName, "¿¢½ºÀÎÇÇ´ÏÆ¼") == 0)
 	{
 		switch (randomNews)
 		{
@@ -963,12 +963,12 @@ void NewsCardIssue(char* CoinName, char* CoinNews, int* NewsEffect)
 			*NewsEffect = 0;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ë‰´ìŠ¤ ì—†ìŒ. 2 / 3 í™•ë¥ ë¡œ ë‰´ìŠ¤
-			*NewsEffect = 0; // ìƒìŠ¹ì„¸ ë³´ì¥ (ìƒìŠ¹ë¥ :50%)
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ´º½º ¾øÀ½. 2 / 3 È®·ü·Î ´º½º
+			*NewsEffect = 0; // »ó½Â¼¼ º¸Àå (»ó½Â·ü:50%)
 			break;
 		}
 	}
-	else if (strcmp(CoinName, "ì›¨ì´ë¶€") == 0)
+	else if (strcmp(CoinName, "¿şÀÌºÎ") == 0)
 	{
 		switch (randomNews)
 		{
@@ -989,12 +989,12 @@ void NewsCardIssue(char* CoinName, char* CoinNews, int* NewsEffect)
 			*NewsEffect = 0;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ë‰´ìŠ¤ ì—†ìŒ. 2 / 3 í™•ë¥ ë¡œ ë‰´ìŠ¤
-			*NewsEffect = 0; // ìƒìŠ¹ì„¸ ë³´ì¥ (ìƒìŠ¹ë¥ :50%)
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ´º½º ¾øÀ½. 2 / 3 È®·ü·Î ´º½º
+			*NewsEffect = 0; // »ó½Â¼¼ º¸Àå (»ó½Â·ü:50%)
 			break;
 		}
 	}
-	else if (strcmp(CoinName, "ìœ„ë°‹ìŠ¤") == 0)
+	else if (strcmp(CoinName, "À§¹Ô½º") == 0)
 	{
 		switch (randomNews)
 		{
@@ -1015,37 +1015,37 @@ void NewsCardIssue(char* CoinName, char* CoinNews, int* NewsEffect)
 			*NewsEffect = 0;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ë‰´ìŠ¤ ì—†ìŒ. 2 / 3 í™•ë¥ ë¡œ ë‰´ìŠ¤
-			*NewsEffect = 0; // ìƒìŠ¹ì„¸ ë³´ì¥ (ìƒìŠ¹ë¥ :50%)
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ´º½º ¾øÀ½. 2 / 3 È®·ü·Î ´º½º
+			*NewsEffect = 0; // »ó½Â¼¼ º¸Àå (»ó½Â·ü:50%)
 			break;
 		}
 	}
-	else if (strcmp(CoinName, "ì´ë”ë¦¬ìŒ") == 0)
+	else if (strcmp(CoinName, "ÀÌ´õ¸®À½") == 0)
 	{
 		switch (randomNews)
 		{
 		case 0:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "ê°€ìƒí™”í ì±„êµ´ ë¶! ê³µì¥ ì‚¬ì¥ë“¤, ì±„êµ´ì¥ ì‚¬ì—…ìœ¼ë¡œ ì „í™˜");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "°¡»óÈ­Æó Ã¤±¼ ºÕ! °øÀå »çÀåµé, Ã¤±¼Àå »ç¾÷À¸·Î ÀüÈ¯");
 			*NewsEffect = 2;
 			break;
 		case 1:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "ì±„êµ´ì¥ ê·œì œ ê°•í™”, ê·¸ë˜í”½ì¹´ë“œ ì‹œì¥ í¬í™”ìƒíƒœ");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "Ã¤±¼Àå ±ÔÁ¦ °­È­, ±×·¡ÇÈÄ«µå ½ÃÀå Æ÷È­»óÅÂ");
 			*NewsEffect = -4;
 			break;
 		case 2:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "ì´ë”ë¦¬ìŒ, ì˜¬í•´ì˜ ê°€ìƒí™”í TOP3 ì„ ì •!");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "ÀÌ´õ¸®À½, ¿ÃÇØÀÇ °¡»óÈ­Æó TOP3 ¼±Á¤!");
 			*NewsEffect = 1;
 			break;
 		case 3:
-			sprintf_s(CoinNews, CoinNewsBufferSize, "ë¸”ë¡ì²´ì¸ ì•”í˜¸í™” ê¸°ìˆ ì˜ ë°œì „, ì±„êµ´í•˜ê¸° ë” ì–´ë ¤ì›Œì ¸...");
+			sprintf_s(CoinNews, CoinNewsBufferSize, "ºí·ÏÃ¼ÀÎ ¾ÏÈ£È­ ±â¼úÀÇ ¹ßÀü, Ã¤±¼ÇÏ±â ´õ ¾î·Á¿öÁ®...");
 			*NewsEffect = -4;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ë‰´ìŠ¤ ì—†ìŒ. 2 / 3 í™•ë¥ ë¡œ ë‰´ìŠ¤
-			*NewsEffect = 0; // ìƒìŠ¹ì„¸ ë³´ì¥ (ìƒìŠ¹ë¥ :50%)
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ´º½º ¾øÀ½. 2 / 3 È®·ü·Î ´º½º
+			*NewsEffect = 0; // »ó½Â¼¼ º¸Àå (»ó½Â·ü:50%)
 			break;
 		}
 	}
-	else if (strcmp(CoinName, "ì²´ì¸ë§ì¿ ") == 0)
+	else if (strcmp(CoinName, "Ã¼ÀÎ¸µÄí") == 0)
 	{
 		switch (randomNews)
 		{
@@ -1066,12 +1066,12 @@ void NewsCardIssue(char* CoinName, char* CoinNews, int* NewsEffect)
 			*NewsEffect = 0;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ë‰´ìŠ¤ ì—†ìŒ. 2 / 3 í™•ë¥ ë¡œ ë‰´ìŠ¤
-			*NewsEffect = 0; // ìƒìŠ¹ì„¸ ë³´ì¥ (ìƒìŠ¹ë¥ :50%)
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ´º½º ¾øÀ½. 2 / 3 È®·ü·Î ´º½º
+			*NewsEffect = 0; // »ó½Â¼¼ º¸Àå (»ó½Â·ü:50%)
 			break;
 		}
 	}
-	else if (strcmp(CoinName, "ì¹ ë¦¬ì¸ ") == 0)
+	else if (strcmp(CoinName, "Ä¥¸®Ã÷") == 0)
 	{
 		switch (randomNews)
 		{
@@ -1092,12 +1092,12 @@ void NewsCardIssue(char* CoinName, char* CoinNews, int* NewsEffect)
 			*NewsEffect = 0;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ë‰´ìŠ¤ ì—†ìŒ. 2 / 3 í™•ë¥ ë¡œ ë‰´ìŠ¤
-			*NewsEffect = 0; // ìƒìŠ¹ì„¸ ë³´ì¥ (ìƒìŠ¹ë¥ :50%)
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ´º½º ¾øÀ½. 2 / 3 È®·ü·Î ´º½º
+			*NewsEffect = 0; // »ó½Â¼¼ º¸Àå (»ó½Â·ü:50%)
 			break;
 		}
 	}
-	else if (strcmp(CoinName, "ì½”ìŠ¤ëª¨ìˆ˜") == 0)
+	else if (strcmp(CoinName, "ÄÚ½º¸ğ¼ö") == 0)
 	{
 		switch (randomNews)
 		{
@@ -1118,12 +1118,12 @@ void NewsCardIssue(char* CoinName, char* CoinNews, int* NewsEffect)
 			*NewsEffect = 0;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ë‰´ìŠ¤ ì—†ìŒ. 2 / 3 í™•ë¥ ë¡œ ë‰´ìŠ¤
-			*NewsEffect = 0; // ìƒìŠ¹ì„¸ ë³´ì¥ (ìƒìŠ¹ë¥ :50%)
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ´º½º ¾øÀ½. 2 / 3 È®·ü·Î ´º½º
+			*NewsEffect = 0; // »ó½Â¼¼ º¸Àå (»ó½Â·ü:50%)
 			break;
 		}
 	}
-	else if (strcmp(CoinName, "í´ë¦¬ì½˜") == 0)
+	else if (strcmp(CoinName, "Æú¸®ÄÜ") == 0)
 	{
 		switch (randomNews)
 		{
@@ -1144,12 +1144,12 @@ void NewsCardIssue(char* CoinName, char* CoinNews, int* NewsEffect)
 			*NewsEffect = 0;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ë‰´ìŠ¤ ì—†ìŒ. 2 / 3 í™•ë¥ ë¡œ ë‰´ìŠ¤
-			*NewsEffect = 0; // ìƒìŠ¹ì„¸ ë³´ì¥ (ìƒìŠ¹ë¥ :50%)
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ´º½º ¾øÀ½. 2 / 3 È®·ü·Î ´º½º
+			*NewsEffect = 0; // »ó½Â¼¼ º¸Àå (»ó½Â·ü:50%)
 			break;
 		}
 	}
-	else if (strcmp(CoinName, "í’€ë¡œìš°") == 0)
+	else if (strcmp(CoinName, "Ç®·Î¿ì") == 0)
 	{
 		switch (randomNews)
 		{
@@ -1170,12 +1170,12 @@ void NewsCardIssue(char* CoinName, char* CoinNews, int* NewsEffect)
 			*NewsEffect = 0;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ë‰´ìŠ¤ ì—†ìŒ. 2 / 3 í™•ë¥ ë¡œ ë‰´ìŠ¤
-			*NewsEffect = 0; // ìƒìŠ¹ì„¸ ë³´ì¥ (ìƒìŠ¹ë¥ :50%)
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ´º½º ¾øÀ½. 2 / 3 È®·ü·Î ´º½º
+			*NewsEffect = 0; // »ó½Â¼¼ º¸Àå (»ó½Â·ü:50%)
 			break;
 		}
 	}
-	else if (strcmp(CoinName, "í—Œíˆ¬") == 0)
+	else if (strcmp(CoinName, "ÇåÅõ") == 0)
 	{
 		switch (randomNews)
 		{
@@ -1196,8 +1196,8 @@ void NewsCardIssue(char* CoinName, char* CoinNews, int* NewsEffect)
 			*NewsEffect = 0;
 			break;
 		default:
-			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ë‰´ìŠ¤ ì—†ìŒ. 2 / 3 í™•ë¥ ë¡œ ë‰´ìŠ¤
-			*NewsEffect = 0; // ìƒìŠ¹ì„¸ ë³´ì¥ (ìƒìŠ¹ë¥ :50%)
+			sprintf_s(CoinNews, CoinNewsBufferSize, " "); // 4 ~ 5 ´º½º ¾øÀ½. 2 / 3 È®·ü·Î ´º½º
+			*NewsEffect = 0; // »ó½Â¼¼ º¸Àå (»ó½Â·ü:50%)
 			break;
 		}
 	}

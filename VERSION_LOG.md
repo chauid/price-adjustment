@@ -1,4 +1,9 @@
-## CoinDB_Price Version List
+## price-adjustmente Version Log
+
+### v1.0
+> - [ ] C -> C++ 난수 생성기 rand() -> mt19937  
+> - [ ] C++형식의 메모리 할당 malloc, free => new, delete  
+> - [ ] 
 
 ### v0.8
 > C++ -> C 마이그레이션 : 메모리 사용량 4MB -> 2MB로 감소  
